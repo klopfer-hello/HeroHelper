@@ -60,7 +60,11 @@ DB.BOSSES = {
     ["kara_moroes"]     = { raidKey = "kara", name = "Moroes",                                          default = { type = "pull" } },
     ["kara_maiden"]     = { raidKey = "kara", name = "Maiden of Virtue",                                default = { type = "pull" } },
     ["kara_opera"]      = { raidKey = "kara", name = "Opera Event",                                     aliases = { "Romulo", "Julianne", "Dorothee", "Strawman", "Tinhead", "Roar", "The Crone", "The Big Bad Wolf" }, default = { type = "pull" } },
-    ["kara_curator"]    = { raidKey = "kara", name = "The Curator",                                     default = { type = "pull" } },
+    -- Curator Evocates at 20% HP for ~20s, during which the raid freecasts.
+    -- Popping BL just as Evocation starts lines the 30s haste window up with
+    -- the biggest uninterrupted DPS window of the fight and kills him before
+    -- his post-Evocate enrage matters.
+    ["kara_curator"]    = { raidKey = "kara", name = "The Curator",                                     default = { type = "hp", hp = 20 } },
     ["kara_terestian"]  = { raidKey = "kara", name = "Terestian Illhoof",                               default = { type = "pull" } },
     ["kara_shade"]      = { raidKey = "kara", name = "Shade of Aran",                                   default = { type = "hp", hp = 35 } },
     ["kara_netherspite"]= { raidKey = "kara", name = "Netherspite",                                     default = { type = "pull" } },
@@ -96,7 +100,10 @@ DB.BOSSES = {
     ["ssc_lurker"]      = { raidKey = "ssc", name = "The Lurker Below",                                 default = { type = "pull" } },
     ["ssc_leotheras"]   = { raidKey = "ssc", name = "Leotheras the Blind",                              default = { type = "phase", phase = 2 }, yells = { [2] = "Now you will feel true pain" } },
     ["ssc_flk"]         = { raidKey = "ssc", name = "Fathom-Lord Karathress",                           default = { type = "hp", hp = 35 } },
-    ["ssc_morogrim"]    = { raidKey = "ssc", name = "Morogrim Tidewalker",                              default = { type = "pull" } },
+    -- Morogrim spawns murloc adds at 50% and 25%. Popping BL at 25% after
+    -- the second wave is handled lets the raid burn him down before another
+    -- add set spawns.
+    ["ssc_morogrim"]    = { raidKey = "ssc", name = "Morogrim Tidewalker",                              default = { type = "hp", hp = 25 } },
     ["ssc_vashj"]       = { raidKey = "ssc", name = "Lady Vashj",
         default = { type = "phase", phase = 3 },
         yells = {
@@ -123,7 +130,10 @@ DB.BOSSES = {
     ["za_akilzon"]      = { raidKey = "za", name = "Akil'zon",                                          default = { type = "pull" } },
     ["za_jan"]          = { raidKey = "za", name = "Jan'alai",                                          default = { type = "hp", hp = 35 } },
     ["za_halazzi"]      = { raidKey = "za", name = "Halazzi",                                           default = { type = "phase", phase = 2 }, yells = { [2] = "Totem will crush you!" } },
-    ["za_hexlord"]      = { raidKey = "za", name = "Hex Lord Malacrass",                                default = { type = "hp", hp = 40 } },
+    -- Hex Lord's abilities (Spirit Bolts, Drain Power) only get nastier as
+    -- the fight drags on. Pulling with BL skips an entire Spirit Bolts cycle
+    -- and is the standard community call for the timed-chest run.
+    ["za_hexlord"]      = { raidKey = "za", name = "Hex Lord Malacrass",                                default = { type = "pull" } },
     ["za_zuljin"]       = { raidKey = "za", name = "Zul'jin",
         default = { type = "phase", phase = 5 },
         yells = {
@@ -144,7 +154,11 @@ DB.BOSSES = {
     -- ==================== BLACK TEMPLE ====================
     ["bt_njentus"]      = { raidKey = "bt", name = "High Warlord Naj'entus",                            default = { type = "pull" } },
     ["bt_supremus"]     = { raidKey = "bt", name = "Supremus",                                          default = { type = "pull" } },
-    ["bt_akama"]        = { raidKey = "bt", name = "Shade of Akama",                                    default = { type = "pull" } },
+    -- The Shade is unattackable for most of the fight while channeling.
+    -- Once freed by Akama it becomes active and drops fast — hp 35 lines
+    -- up with the burn window after it first takes damage so the reminder
+    -- fires during the actual DPS phase rather than the channeling setup.
+    ["bt_akama"]        = { raidKey = "bt", name = "Shade of Akama",                                    default = { type = "hp", hp = 35 } },
     ["bt_teron"]        = { raidKey = "bt", name = "Teron Gorefiend",                                   default = { type = "pull" } },
     ["bt_bloodboil"]    = { raidKey = "bt", name = "Gurtogg Bloodboil",                                 default = { type = "hp", hp = 25 } },
     ["bt_ros"]          = { raidKey = "bt", name = "Reliquary of Souls",                                default = { type = "phase", phase = 3 }, yells = { [3] = "I will not be denied" } },
