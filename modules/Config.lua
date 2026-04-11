@@ -484,7 +484,7 @@ function Config:BuildGeneralTab(panel)
 
     -- Multi-shaman coordination toggle. When on, every reminder fires
     -- through a 500ms coordination window with other HeroHelper-using
-    -- shamans in the group; alphabetically lowest name wins. See the
+    -- shamans in the group; lowest-priority alive bidder wins. See the
     -- Comms module for the addon-message protocol.
     local cbCoordinate = MakeCheckbox(panel, "Coordinate with other shamans (multi-Hero raids)")
     cbCoordinate:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, y)
@@ -492,6 +492,36 @@ function Config:BuildGeneralTab(panel)
         HH.db.settings.coordinateShamans = checked
     end)
     y = y - ROW_HEIGHT
+
+    -- Coordination role picker. Lower priority wins the bid; the alive
+    -- check at fire time means a primary who dies during the pull
+    -- automatically yields to the secondary, etc. "Auto" treats the
+    -- player as a generic bidder (priority 99) and lets alphabetical
+    -- name precedence pick the winner.
+    local roleLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    roleLabel:SetPoint("TOPLEFT", panel, "TOPLEFT", 18, y - 2)
+    roleLabel:SetText("My role:")
+    roleLabel:SetTextColor(D.label[1], D.label[2], D.label[3])
+
+    local roleItems = {
+        { label = "Auto (alphabetical)", value = 99 },
+        { label = "Primary",             value = 1  },
+        { label = "Secondary",           value = 2  },
+        { label = "Backup",              value = 3  },
+    }
+
+    local function RoleLabelFor(p)
+        for _, item in ipairs(roleItems) do
+            if item.value == p then return item.label end
+        end
+        return "Auto (alphabetical)"
+    end
+
+    local roleDD = MakeDropdown(panel, 180, roleItems, function(value)
+        HH.db.settings.shamanPriority = value
+    end, RoleLabelFor(HH.db.settings.shamanPriority or 99), "shamanrole")
+    roleDD:SetPoint("LEFT", roleLabel, "RIGHT", 4, -2)
+    y = y - ROW_HEIGHT - 6
 
     y = y - 8
     SectionHeader("REMINDER BUTTON")
@@ -652,6 +682,9 @@ function Config:BuildGeneralTab(panel)
         cbMinimap:SetChecked(HH.db.settings.showMinimap ~= false)
         cbDungeons:SetChecked(HH.db.settings.dungeonPullAlerts == true)
         cbCoordinate:SetChecked(HH.db.settings.coordinateShamans ~= false)
+        if roleDD and roleDD.RefreshText then
+            roleDD:RefreshText(RoleLabelFor(HH.db.settings.shamanPriority or 99))
+        end
         cbLocked:SetChecked(HH.chardb.settings.button.locked)
         cbSoundEnabled:SetChecked(HH.chardb.settings.soundEnabled)
         cbTest:SetChecked(HH.ReminderButton and HH.ReminderButton:IsTestMode() or false)

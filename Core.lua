@@ -109,11 +109,20 @@ local defaultDB = {
         -- Multi-shaman coordination over the addon-message channel. When
         -- ON, every reminder fire goes through a 500ms grace window in
         -- which other HeroHelper-using shamans can claim the pull; the
-        -- alphabetically lowest player name wins and the others
+        -- lowest-priority player who's still alive wins and the others
         -- suppress their reminder. See modules/Comms.lua for the
         -- protocol details. Defaults to ON because it has zero cost
         -- when solo (no group, no broadcast, no delay).
         coordinateShamans = true,
+        -- Coordination role within the shaman group. Lower priorities
+        -- win the bid; ties broken alphabetically by name. The "alive"
+        -- check at fire time means a primary who dies during the pull
+        -- automatically yields to the secondary, etc.
+        --   1  = Primary    (always casts when alive)
+        --   2  = Secondary  (casts if primary is dead)
+        --   3  = Backup     (casts if primary and secondary are dead)
+        --   99 = Auto       (no explicit role; alphabetical fallback)
+        shamanPriority = 99,
     },
 }
 
