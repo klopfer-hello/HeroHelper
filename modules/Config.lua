@@ -214,10 +214,24 @@ end
 --
 -- Each dropdown needs a globally unique frame name, so we generate one per
 -- call via a monotonic counter.
+-- Debug print helper that always prints (not gated by debug mode). Used by
+-- MakeDropdown instrumentation so the user can see dropdown activity in the
+-- chat frame while we track down the sound-dropdown bug.
+local function DDLog(msg)
+    print("|cFFFFFF00[HH-DD]|r " .. tostring(msg))
+end
+
 local dropdownCounter = 0
-local function MakeDropdown(parent, width, items, onSelect, initialText)
+local function MakeDropdown(parent, width, items, onSelect, initialText, debugTag)
     dropdownCounter = dropdownCounter + 1
     local name = "HeroHelperDropdown" .. dropdownCounter
+    local tag  = debugTag or ("dd#" .. dropdownCounter)
+
+    DDLog(("CREATE %s name=%s items=%d LibDD=%s initial=%s"):format(
+        tag, name, #items, tostring(LibDD ~= nil), tostring(initialText)))
+    for i, entry in ipairs(items) do
+        DDLog(("  [%d] label=%s value=%s"):format(i, tostring(entry.label), tostring(entry.value)))
+    end
 
     -- Fallback: if LibDD failed to load (shouldn't happen because we embed
     -- it, but defensive anyway), fall back to the native template so the
@@ -229,12 +243,14 @@ local function MakeDropdown(parent, width, items, onSelect, initialText)
         LibDD:UIDropDownMenu_SetText(dd, initialText or "")
 
         LibDD:UIDropDownMenu_Initialize(dd, function(self, level)
+            DDLog(("INIT %s level=%s building %d items"):format(tag, tostring(level), #items))
             for _, entry in ipairs(items) do
                 local info = LibDD:UIDropDownMenu_CreateInfo()
                 info.text         = entry.label
                 info.value        = entry.value
                 info.notCheckable = true
                 info.func = function()
+                    DDLog(("SELECT %s -> %s"):format(tag, tostring(entry.value)))
                     LibDD:UIDropDownMenu_SetText(dd, entry.label)
                     if onSelect then onSelect(entry.value, entry.label) end
                 end
@@ -246,18 +262,37 @@ local function MakeDropdown(parent, width, items, onSelect, initialText)
         UIDropDownMenu_SetWidth(dd, width)
         UIDropDownMenu_SetText(dd, initialText or "")
         UIDropDownMenu_Initialize(dd, function(self, level)
+            DDLog(("INIT[native] %s level=%s building %d items"):format(tag, tostring(level), #items))
             for _, entry in ipairs(items) do
                 local info = UIDropDownMenu_CreateInfo()
                 info.text         = entry.label
                 info.value        = entry.value
                 info.notCheckable = true
                 info.func = function()
+                    DDLog(("SELECT[native] %s -> %s"):format(tag, tostring(entry.value)))
                     UIDropDownMenu_SetText(dd, entry.label)
                     if onSelect then onSelect(entry.value, entry.label) end
                 end
                 UIDropDownMenu_AddButton(info, level)
             end
         end)
+    end
+
+    -- Hook the arrow-button OnMouseDown so we can see if clicks are even
+    -- reaching the dropdown. LibDD's Create_UIDropDownMenu exposes the
+    -- arrow button as `dd.Button`; the native template exposes it as
+    -- `<name>Button`. Try both.
+    local arrowBtn = dd.Button or _G[name .. "Button"]
+    if arrowBtn then
+        arrowBtn:HookScript("OnMouseDown", function()
+            DDLog(("CLICK %s arrow button"):format(tag))
+        end)
+        arrowBtn:HookScript("OnEnter", function()
+            DDLog(("HOVER %s arrow button"):format(tag))
+        end)
+        DDLog(("  arrow button found for %s: %s"):format(tag, arrowBtn:GetName() or "<unnamed>"))
+    else
+        DDLog(("  WARNING: no arrow button found for %s"):format(tag))
     end
 
     -- Expose the SetText method on the frame itself so callers (like the
@@ -520,7 +555,7 @@ function Config:BuildGeneralTab(panel)
     local soundDD = MakeDropdown(panel, 200, soundItems, function(value)
         HH.chardb.settings.sound = value
         if HH.ReminderButton then HH.ReminderButton:PreviewSound() end
-    end, HH.chardb.settings.sound or "HeroHelper: Raid Warning")
+    end, HH.chardb.settings.sound or "HeroHelper: Raid Warning", "sound")
     soundDD:SetPoint("LEFT", soundLabel, "RIGHT", 4, -2)
     y = y - (ROW_HEIGHT + 6)
 
@@ -569,7 +604,7 @@ function Config:BuildBossesTab(panel)
     local raidDD = MakeDropdown(panel, 200, raidItems, function(value)
         selectedRaid = value
         Config:RefreshBossList()
-    end, HH.Database.RAIDS[1].name)
+    end, HH.Database.RAIDS[1].name, "raid")
     raidDD:SetPoint("LEFT", raidLabel, "RIGHT", 4, -2)
 
     -- Import / Export buttons (top-right of the bosses tab)

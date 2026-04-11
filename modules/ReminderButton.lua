@@ -87,10 +87,13 @@ end
 function RB:GetSoundList()
     local list = {}
     local seen = {}
+    local builtinCount = 0
     for _, entry in ipairs(SOUND_ENTRIES) do
         table.insert(list, entry.key)
         seen[entry.key] = true
+        builtinCount = builtinCount + 1
     end
+    local extraCount = 0
     if LSM then
         local extra = LSM:List("sound")
         if extra then
@@ -98,10 +101,13 @@ function RB:GetSoundList()
                 if not seen[key] and key ~= "None" then
                     table.insert(list, key)
                     seen[key] = true
+                    extraCount = extraCount + 1
                 end
             end
         end
     end
+    print(("|cFFFFFF00[HH-DD]|r GetSoundList: builtin=%d extra=%d total=%d"):format(
+        builtinCount, extraCount, #list))
     return list
 end
 
