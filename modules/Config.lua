@@ -488,6 +488,15 @@ function Config:BuildBossesTab(panel)
     end, HH.Database.RAIDS[1].name)
     raidDD:SetPoint("LEFT", raidLabel, "RIGHT", 4, -2)
 
+    -- Import / Export buttons (top-right of the bosses tab)
+    local exportBtn = MakeFlatButton(panel, "Export", 70, 22)
+    exportBtn:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -80, 0)
+    exportBtn:SetScript("OnClick", function() Config:ShowExportPopup() end)
+
+    local importBtn = MakeFlatButton(panel, "Import", 70, 22)
+    importBtn:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -4, 0)
+    importBtn:SetScript("OnClick", function() Config:ShowImportPopup() end)
+
     -- Scrollable list for boss rows
     local scrollFrame = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate")
     scrollFrame:SetPoint("TOPLEFT",     panel, "TOPLEFT",     0, -34)
@@ -638,4 +647,133 @@ end
 
 function Config:Toggle()
     if configState.visible then self:Hide() else self:Show() end
+end
+
+-- ============================================================================
+-- Import / Export popup
+-- ============================================================================
+--
+-- A single shared popup frame used for both export and import. In export
+-- mode, the edit box is read-only and pre-filled with the serialized config
+-- string; the user clicks CTRL+A / CTRL+C to copy. In import mode, the edit
+-- box is writable and the [Import] button parses the contents.
+
+local popup
+
+local function CreatePopup()
+    if popup then return popup end
+
+    local f = CreateFrame("Frame", "HeroHelperIOPopup", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
+    f:SetSize(460, 200)
+    f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    f:SetFrameStrata("FULLSCREEN_DIALOG")
+    f:SetMovable(true)
+    f:EnableMouse(true)
+    f:SetClampedToScreen(true)
+    f:Hide()
+
+    f:RegisterForDrag("LeftButton")
+    f:SetScript("OnDragStart", f.StartMoving)
+    f:SetScript("OnDragStop", f.StopMovingOrSizing)
+
+    if f.SetBackdrop then
+        f:SetBackdrop({
+            bgFile   = "Interface\\ChatFrame\\ChatFrameBackground",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            tile = true, tileSize = 16, edgeSize = 8,
+            insets = { left = 2, right = 2, top = 2, bottom = 2 },
+        })
+        f:SetBackdropColor(D.bg[1], D.bg[2], D.bg[3], D.bgA)
+        f:SetBackdropBorderColor(D.border[1], D.border[2], D.border[3], D.borA)
+    end
+
+    local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    title:SetPoint("TOPLEFT", f, "TOPLEFT", PADDING, -PADDING)
+    f.title = title
+
+    local help = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    help:SetPoint("TOPLEFT", f, "TOPLEFT", PADDING, -PADDING - 16)
+    help:SetPoint("TOPRIGHT", f, "TOPRIGHT", -PADDING, -PADDING - 16)
+    help:SetJustifyH("LEFT")
+    help:SetTextColor(D.label[1], D.label[2], D.label[3])
+    f.help = help
+
+    -- Multi-line-ish edit box (TBC Classic has a working ScrollingEditBox,
+    -- but for our short single-line share strings a plain EditBox is enough;
+    -- we just widen it and disable autofocus).
+    local editBg = f:CreateTexture(nil, "BACKGROUND")
+    editBg:SetPoint("TOPLEFT",     f, "TOPLEFT",  PADDING,     -PADDING - 44)
+    editBg:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -PADDING,  PADDING + 28)
+    editBg:SetColorTexture(0.07, 0.07, 0.09, 1)
+
+    local edit = CreateFrame("EditBox", nil, f)
+    edit:SetPoint("TOPLEFT",     editBg, "TOPLEFT",     4,  -4)
+    edit:SetPoint("BOTTOMRIGHT", editBg, "BOTTOMRIGHT", -4,  4)
+    edit:SetFontObject("GameFontHighlightSmall")
+    edit:SetAutoFocus(false)
+    edit:SetMultiLine(true)
+    edit:SetMaxLetters(4096)
+    edit:SetScript("OnEscapePressed", function(self) self:ClearFocus(); f:Hide() end)
+    f.edit = edit
+
+    AddThinBorder(editBg, D.border[1], D.border[2], D.border[3], D.borA)
+
+    -- Action button (changes label + behavior depending on mode)
+    local actionBtn = MakeFlatButton(f, "OK", 110, 22)
+    actionBtn:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -PADDING - 120, PADDING)
+    f.actionBtn = actionBtn
+
+    local closeBtn = MakeFlatButton(f, "Close", 110, 22)
+    closeBtn:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -PADDING, PADDING)
+    closeBtn:SetScript("OnClick", function() f:Hide() end)
+
+    -- ESC closes
+    table.insert(UISpecialFrames, "HeroHelperIOPopup")
+
+    popup = f
+    return f
+end
+
+function Config:ShowExportPopup()
+    local f = CreatePopup()
+    f.title:SetText("|cFFFF7D1AHeroHelper|r  |cFF66666BExport|r")
+    f.help:SetText("Copy this string (Ctrl+A, Ctrl+C) and share it with your raid.")
+
+    local str = HH.Database:ExportOverrides()
+    f.edit:SetText(str)
+    f.edit:HighlightText()
+    f.edit:SetFocus()
+
+    f.actionBtn.label:SetText("Select All")
+    f.actionBtn:SetScript("OnClick", function()
+        f.edit:SetFocus()
+        f.edit:HighlightText()
+    end)
+
+    f:Show()
+    f:Raise()
+end
+
+function Config:ShowImportPopup()
+    local f = CreatePopup()
+    f.title:SetText("|cFFFF7D1AHeroHelper|r  |cFF66666BImport|r")
+    f.help:SetText("Paste an export string below, then click Apply. Existing per-boss settings will be overwritten.")
+    f.edit:SetText("")
+    f.edit:SetFocus()
+
+    f.actionBtn.label:SetText("Apply")
+    f.actionBtn:SetScript("OnClick", function()
+        local str = f.edit:GetText()
+        local ok, applied, skipped, err = HH.Database:ImportOverrides(str)
+        if not ok then
+            HH:Print("Import failed: " .. tostring(err), HH.Colors.error)
+            return
+        end
+        HH:Print(string.format("Imported %d boss entries (%d skipped).", applied, skipped), HH.Colors.success)
+        Config:RefreshBossList()
+        f:Hide()
+    end)
+
+    f:Show()
+    f:Raise()
 end

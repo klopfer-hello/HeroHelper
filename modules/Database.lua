@@ -257,3 +257,108 @@ function DB:Initialize()
     HH:Debug("Database loaded: " .. DB:Count() .. " bosses across " .. #DB.RAIDS .. " raids")
     return true
 end
+
+-- ============================================================================
+-- Import / Export
+-- ============================================================================
+--
+-- Serialization format v1:
+--
+--     HH1|<bossID>=<spec>|<bossID>=<spec>|...
+--
+-- <spec> is one of:
+--     pull         -> trigger on pull
+--     hp:<N>       -> trigger at HP% <= N
+--     phase:<N>    -> trigger on phase >= N
+--     off          -> disabled for this boss
+--
+-- The format is intentionally plain text, no base64, no Lua code — so it is
+-- safe to `loadstring`-free parse, safe to paste into chat, and easy to read
+-- by a human. Missing boss IDs fall back to the database default on import.
+-- Unknown boss IDs are ignored (forward/backward compatibility).
+
+local EXPORT_VERSION = "HH1"
+
+function DB:ExportOverrides()
+    local parts = { EXPORT_VERSION }
+    -- Emit in a stable alphabetical order so two exports of the same config
+    -- produce identical strings.
+    local ids = {}
+    for id in pairs(HH.chardb.bosses or {}) do table.insert(ids, id) end
+    table.sort(ids)
+
+    for _, id in ipairs(ids) do
+        local o = HH.chardb.bosses[id]
+        if o and DB.BOSSES[id] then
+            local spec
+            if o.enabled == false then
+                spec = "off"
+            elseif o.type == "hp" and o.hp then
+                spec = "hp:" .. tostring(o.hp)
+            elseif o.type == "phase" and o.phase then
+                spec = "phase:" .. tostring(o.phase)
+            elseif o.type == "pull" then
+                spec = "pull"
+            end
+            if spec then
+                table.insert(parts, id .. "=" .. spec)
+            end
+        end
+    end
+
+    return table.concat(parts, "|")
+end
+
+-- Parses a HH1|... string. Returns (ok, applied, skipped, err). On success,
+-- overrides are written into HH.chardb.bosses (existing entries for unknown
+-- IDs are preserved; entries for known IDs are replaced).
+function DB:ImportOverrides(str)
+    if type(str) ~= "string" then return false, 0, 0, "not a string" end
+    str = str:gsub("^%s+", ""):gsub("%s+$", "")
+
+    local version, rest = str:match("^(HH%d+)|(.*)$")
+    if not version then
+        -- Also accept a bare version string with no entries (valid empty import)
+        if str == EXPORT_VERSION then return true, 0, 0, nil end
+        return false, 0, 0, "missing or invalid version prefix (expected HH1|...)"
+    end
+    if version ~= EXPORT_VERSION then
+        return false, 0, 0, "unsupported format version: " .. version
+    end
+
+    HH.chardb.bosses = HH.chardb.bosses or {}
+
+    local applied, skipped = 0, 0
+    for entry in (rest .. "|"):gmatch("([^|]+)|") do
+        local id, spec = entry:match("^([^=]+)=(.*)$")
+        if id and spec and DB.BOSSES[id] then
+            local o = { enabled = true }
+            if spec == "pull" then
+                o.type = "pull"
+            elseif spec == "off" then
+                o.enabled = false
+            else
+                local kind, val = spec:match("^(%a+):(%d+)$")
+                if kind == "hp" then
+                    o.type = "hp"
+                    o.hp   = math.max(1, math.min(99, tonumber(val) or 35))
+                elseif kind == "phase" then
+                    o.type = "phase"
+                    o.phase = math.max(1, math.min(10, tonumber(val) or 2))
+                else
+                    o = nil
+                end
+            end
+            if o then
+                HH.chardb.bosses[id] = o
+                applied = applied + 1
+            else
+                skipped = skipped + 1
+            end
+        elseif id then
+            skipped = skipped + 1
+        end
+    end
+
+    return true, applied, skipped, nil
+end
