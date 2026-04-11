@@ -444,11 +444,16 @@ function Config:BuildGeneralTab(panel)
     end)
     y = y - ROW_HEIGHT
 
-    -- Sound dropdown — uses LibSharedMedia list. Selecting a new entry both
-    -- saves it and plays a one-shot preview so the user can audition the
-    -- sound immediately without having to hit the Preview button afterwards.
+    -- Sound dropdown — ask ReminderButton for the list so we see our built-in
+    -- entries plus any extras from other LSM-using addons. We deliberately do
+    -- NOT use LSM:List("sound") directly here because LibSharedMedia rejects
+    -- any sound path that doesn't start with "Interface\" (so our built-in
+    -- "Sound\Interface\..." paths are never added to the LSM list).
+    -- Selecting an entry both saves it and plays a one-shot preview so the
+    -- user can audition the sound without having to hit the Preview button.
     local soundItems = {}
-    local soundList = (LSM and LSM:List("sound")) or { "HeroHelper: Raid Warning" }
+    local soundList = (HH.ReminderButton and HH.ReminderButton:GetSoundList())
+        or { "HeroHelper: Raid Warning" }
     for _, key in ipairs(soundList) do
         table.insert(soundItems, { label = key, value = key })
     end

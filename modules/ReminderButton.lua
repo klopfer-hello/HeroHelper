@@ -64,6 +64,13 @@ local SOUND_ENTRIES = {
 -- sound name is currently saved in settings.
 local soundByKey = {}
 
+-- NOTE: LibSharedMedia's lib:Register() rejects any sound whose path doesn't
+-- start with "interface" (see LibSharedMedia-3.0.lua around lib:Register).
+-- Our built-in sounds live under "Sound\Interface\...", so LSM silently
+-- refuses every registration and the sound never appears in LSM:List.
+-- We still call :Register so that any other addon inspecting LSM sees an
+-- attempt (it's a no-op on failure), but we build the dropdown list and
+-- play the sound from our own SOUND_ENTRIES table instead.
 local function RegisterSounds()
     for _, entry in ipairs(SOUND_ENTRIES) do
         soundByKey[entry.key] = entry
@@ -71,9 +78,31 @@ local function RegisterSounds()
     end
 end
 
+-- Returns the ordered list of sound keys the user can choose from in the
+-- config dropdown. Starts with our built-in entries (always present, even
+-- though LSM rejects them), then appends any *additional* LSM sound keys
+-- registered by other addons that happen to live under "Interface\". The
+-- config dropdown uses this instead of LSM:List("sound") because LSM's
+-- list would otherwise be missing every HeroHelper entry.
 function RB:GetSoundList()
-    if not LSM then return { "HeroHelper: Raid Warning" } end
-    return LSM:List("sound")
+    local list = {}
+    local seen = {}
+    for _, entry in ipairs(SOUND_ENTRIES) do
+        table.insert(list, entry.key)
+        seen[entry.key] = true
+    end
+    if LSM then
+        local extra = LSM:List("sound")
+        if extra then
+            for _, key in ipairs(extra) do
+                if not seen[key] and key ~= "None" then
+                    table.insert(list, key)
+                    seen[key] = true
+                end
+            end
+        end
+    end
+    return list
 end
 
 -- ============================================================================
