@@ -4,7 +4,7 @@ A simple TBC Classic Anniversary addon that tells Shamans **when** to cast Heroi
 
 No more checking the spreadsheet between pulls. No more "wait, was I supposed to lust this one?". A glowing button pops up at the right moment — you click it, you cast, you keep DPS'ing.
 
-![Reminder button on a boss pull](docs/screenshot-reminder.png)
+![Reminder button on a boss pull](media/screenshots/screenshot-reminder.png)
 *The reminder button appears when it's time to cast. Click it to fire Heroism or Bloodlust.*
 
 ---
@@ -25,14 +25,14 @@ No more checking the spreadsheet between pulls. No more "wait, was I supposed to
 
 **2. First-time setup.** Type `/hh` to open the options.
 
-![Options panel](docs/screenshot-options-general.png)
+![Options panel](media/screenshots/screenshot-options-general.png)
 
 - In the **General** tab, choose your sound and (if you raid with another shaman) pick your role: *Primary*, *Secondary*, *Backup*, or *Auto*.
 - Type `/hh test` once to position the reminder button on screen, drag it where you want it, then `/hh test` again to lock it in.
 
 **3. Pick your triggers.** Open the **Bosses** tab.
 
-![Bosses configuration](docs/screenshot-options-bosses.png)
+![Bosses configuration](media/screenshots/screenshot-options-bosses.png)
 
 Each boss has a default trigger that should be sensible for most raids. You can change any of them:
 
