@@ -37,19 +37,37 @@ local testMode = false
 
 local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
 
+-- Known-good built-in sound kit IDs in TBC Classic 2.5.5. Used as reliable
+-- fallbacks for PlaySound() when a file path can't be resolved. These are
+-- the numeric SoundKitID values from the TBC client.
+local SOUNDKIT_RAID_WARNING = 8959
+local SOUNDKIT_READY_CHECK  = 8960
+local SOUNDKIT_LEVEL_UP     = 888
+local SOUNDKIT_AUCTION_OPEN = 6182
+local SOUNDKIT_TELL_MESSAGE = 3081
+
+-- Each registered sound is stored as { file = <path>, kit = <soundKitID> }.
+-- file is played first via PlaySoundFile; if that fails (willPlay == false,
+-- which happens when the .ogg isn't shipped with the client), we fall back
+-- to PlaySound(kit). That way the preview / trigger sound always produces
+-- *something* audible even if a specific file path is missing on a given
+-- client build.
+local SOUND_ENTRIES = {
+    { key = "HeroHelper: Raid Warning", file = "Sound\\Interface\\RaidWarning.ogg",  kit = SOUNDKIT_RAID_WARNING },
+    { key = "HeroHelper: Ready Check",  file = "Sound\\Interface\\ReadyCheck.ogg",   kit = SOUNDKIT_READY_CHECK  },
+    { key = "HeroHelper: Level Up",     file = "Sound\\Interface\\LevelUp.ogg",      kit = SOUNDKIT_LEVEL_UP     },
+    { key = "HeroHelper: Auction Open", file = "Sound\\Interface\\AuctionWindowOpen.ogg", kit = SOUNDKIT_AUCTION_OPEN },
+    { key = "HeroHelper: Tell Message", file = "Sound\\Interface\\iTellMessage.ogg", kit = SOUNDKIT_TELL_MESSAGE },
+}
+
+-- key -> entry lookup, so PlaySound can find the kit fallback for whatever
+-- sound name is currently saved in settings.
+local soundByKey = {}
+
 local function RegisterSounds()
-    if not LSM then return end
-    -- Built-in WoW sounds that work reliably in TBC Anniversary. Each entry
-    -- is a (key -> sound file) pair. Keys are shown in the config dropdown.
-    local sounds = {
-        ["HeroHelper: Raid Warning"] = "Sound\\Interface\\RaidWarning.ogg",
-        ["HeroHelper: Ready Check"]  = "Sound\\Interface\\ReadyCheck.ogg",
-        ["HeroHelper: Alarm Clock"]  = "Sound\\Interface\\AlarmClockWarning3.ogg",
-        ["HeroHelper: Level Up"]     = "Sound\\Interface\\LevelUp.ogg",
-        ["HeroHelper: PvP Flag"]     = "Sound\\Spells\\PVPFlagTaken.ogg",
-    }
-    for key, file in pairs(sounds) do
-        LSM:Register("sound", key, file)
+    for _, entry in ipairs(SOUND_ENTRIES) do
+        soundByKey[entry.key] = entry
+        if LSM then LSM:Register("sound", entry.key, entry.file) end
     end
 end
 
@@ -353,17 +371,49 @@ function RB:TestShow()
     self:ToggleTestMode()
 end
 
-function RB:PlaySound()
-    if not HH.chardb.settings.soundEnabled then return end
-    local key = HH.chardb.settings.sound
-    if not key then return end
-    if LSM then
+-- Core sound playback. Returns true if *anything* was queued to play.
+--
+-- PlaySoundFile is tried first so the user hears whatever LSM media they
+-- selected (including custom SharedMedia from other addons). If the file
+-- can't be resolved by the client (willPlay == false, which happens in
+-- TBC for .ogg paths that don't ship with 2.5.5) we fall back to the
+-- numeric SoundKit ID associated with the same entry. Only if *both*
+-- fail do we fall back to a global default. This chain is the reason
+-- the preview used to look broken — the old code silently assumed
+-- PlaySoundFile always succeeds.
+local function PlaySoundEntry(key)
+    -- 1) Try the exact LSM file the user picked.
+    if LSM and key then
         local file = LSM:Fetch("sound", key, true)
         if file then
-            PlaySoundFile(file, "Master")
-            return
+            local willPlay = PlaySoundFile(file, "Master")
+            if willPlay then return true end
         end
     end
-    -- Fallback to a known-good TBC sound ID
-    PlaySound(3081) -- TELLMESSAGE
+
+    -- 2) Fall back to the SoundKit ID bundled with the same entry.
+    local entry = key and soundByKey[key]
+    if entry and entry.kit then
+        local willPlay = PlaySound(entry.kit, "Master")
+        if willPlay then return true end
+    end
+
+    -- 3) Last-resort global fallback: raid warning is universally present.
+    PlaySound(SOUNDKIT_RAID_WARNING, "Master")
+    return true
+end
+
+-- Fired on HEROHELPER_TRIGGER. Respects the user's "Play sound on trigger"
+-- toggle — if they've disabled sounds, the reminder still shows but stays
+-- silent.
+function RB:PlaySound()
+    if not HH.chardb.settings.soundEnabled then return end
+    PlaySoundEntry(HH.chardb.settings.sound)
+end
+
+-- Fired by the "Preview sound" button in the config panel. Intentionally
+-- bypasses the soundEnabled flag — the whole point of the preview is to
+-- let the user audition a sound before deciding whether to enable it.
+function RB:PreviewSound()
+    PlaySoundEntry(HH.chardb.settings.sound)
 end

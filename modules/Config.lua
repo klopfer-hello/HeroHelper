@@ -444,7 +444,9 @@ function Config:BuildGeneralTab(panel)
     end)
     y = y - ROW_HEIGHT
 
-    -- Sound dropdown — uses LibSharedMedia list
+    -- Sound dropdown — uses LibSharedMedia list. Selecting a new entry both
+    -- saves it and plays a one-shot preview so the user can audition the
+    -- sound immediately without having to hit the Preview button afterwards.
     local soundItems = {}
     local soundList = (LSM and LSM:List("sound")) or { "HeroHelper: Raid Warning" }
     for _, key in ipairs(soundList) do
@@ -452,14 +454,17 @@ function Config:BuildGeneralTab(panel)
     end
     local soundDD = MakeDropdown(panel, 200, soundItems, function(value)
         HH.chardb.settings.sound = value
+        if HH.ReminderButton then HH.ReminderButton:PreviewSound() end
     end, HH.chardb.settings.sound or "HeroHelper: Raid Warning")
     soundDD:SetPoint("TOPLEFT", panel, "TOPLEFT", -16, y)
     y = y - (ROW_HEIGHT + 6)
 
+    -- Preview always plays, regardless of the "Play sound on trigger" flag —
+    -- otherwise the user can't audition a sound while the feature is off.
     local previewBtn = MakeFlatButton(panel, "Preview sound", 120, 22)
     previewBtn:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, y)
     previewBtn:SetScript("OnClick", function()
-        if HH.ReminderButton then HH.ReminderButton:PlaySound() end
+        if HH.ReminderButton then HH.ReminderButton:PreviewSound() end
     end)
     y = y - ROW_HEIGHT
 
@@ -472,6 +477,10 @@ function Config:BuildGeneralTab(panel)
         cbLocked:SetChecked(HH.chardb.settings.button.locked)
         cbSoundEnabled:SetChecked(HH.chardb.settings.soundEnabled)
         cbTest:SetChecked(HH.ReminderButton and HH.ReminderButton:IsTestMode() or false)
+        -- Dropdown text is not auto-synced from saved variables; refresh it
+        -- here so reopening the panel after a selection shows the right
+        -- label instead of whatever was baked in at construction time.
+        UIDropDownMenu_SetText(soundDD, HH.chardb.settings.sound or "HeroHelper: Raid Warning")
     end)
 end
 
