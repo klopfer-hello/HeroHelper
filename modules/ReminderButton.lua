@@ -79,35 +79,19 @@ local function RegisterSounds()
 end
 
 -- Returns the ordered list of sound keys the user can choose from in the
--- config dropdown. Starts with our built-in entries (always present, even
--- though LSM rejects them), then appends any *additional* LSM sound keys
--- registered by other addons that happen to live under "Interface\". The
--- config dropdown uses this instead of LSM:List("sound") because LSM's
--- list would otherwise be missing every HeroHelper entry.
+-- config dropdown. This is *just* our built-in entries — we deliberately do
+-- NOT merge in LSM:List("sound"), because other addons (BigWigs, Capping,
+-- Details, …) register hundreds of their own sounds into the same shared
+-- pool. A real user had 223 entries from other addons in the live client,
+-- which produced a dropdown taller than the screen that couldn't be used.
+-- If someone wants an exotic sound they can register it via LSM and we'll
+-- still play it via PlaySoundEntry — but the picker is kept small and
+-- curated on purpose.
 function RB:GetSoundList()
     local list = {}
-    local seen = {}
-    local builtinCount = 0
     for _, entry in ipairs(SOUND_ENTRIES) do
         table.insert(list, entry.key)
-        seen[entry.key] = true
-        builtinCount = builtinCount + 1
     end
-    local extraCount = 0
-    if LSM then
-        local extra = LSM:List("sound")
-        if extra then
-            for _, key in ipairs(extra) do
-                if not seen[key] and key ~= "None" then
-                    table.insert(list, key)
-                    seen[key] = true
-                    extraCount = extraCount + 1
-                end
-            end
-        end
-    end
-    print(("|cFFFFFF00[HH-DD]|r GetSoundList: builtin=%d extra=%d total=%d"):format(
-        builtinCount, extraCount, #list))
     return list
 end
 
