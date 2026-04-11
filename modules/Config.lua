@@ -472,6 +472,16 @@ function Config:BuildGeneralTab(panel)
     end)
     y = y - ROW_HEIGHT
 
+    -- Master toggle for 5-man dungeon boss alerts. When on, every TBC
+    -- dungeon boss fires a "pull" trigger; see Database.lua dungeon block
+    -- and the isDungeon gate in GetTriggerConfig.
+    local cbDungeons = MakeCheckbox(panel, "Alert for dungeon bosses (5-man, on pull)")
+    cbDungeons:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, y)
+    cbDungeons:HookClick(function(checked)
+        HH.db.settings.dungeonPullAlerts = checked
+    end)
+    y = y - ROW_HEIGHT
+
     y = y - 8
     SectionHeader("REMINDER BUTTON")
 
@@ -629,6 +639,7 @@ function Config:BuildGeneralTab(panel)
     panel:SetScript("OnShow", function(self)
         cbEnabled:SetChecked(HH.db.settings.enabled)
         cbMinimap:SetChecked(HH.db.settings.showMinimap ~= false)
+        cbDungeons:SetChecked(HH.db.settings.dungeonPullAlerts == true)
         cbLocked:SetChecked(HH.chardb.settings.button.locked)
         cbSoundEnabled:SetChecked(HH.chardb.settings.soundEnabled)
         cbTest:SetChecked(HH.ReminderButton and HH.ReminderButton:IsTestMode() or false)

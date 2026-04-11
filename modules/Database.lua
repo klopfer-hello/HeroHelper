@@ -34,15 +34,34 @@ local DB = HH.Database
 -- ============================================================================
 
 DB.RAIDS = {
-    { key = "kara",    name = "Karazhan",          order = 1 },
-    { key = "gruul",   name = "Gruul's Lair",      order = 2 },
-    { key = "mag",     name = "Magtheridon's Lair",order = 3 },
-    { key = "ssc",     name = "Serpentshrine Cavern", order = 4 },
-    { key = "tk",      name = "Tempest Keep",      order = 5 },
-    { key = "za",      name = "Zul'Aman",          order = 6 },
-    { key = "hyjal",   name = "Hyjal Summit",      order = 7 },
-    { key = "bt",      name = "Black Temple",      order = 8 },
-    { key = "swp",     name = "Sunwell Plateau",   order = 9 },
+    -- Raids
+    { key = "kara",    name = "Karazhan",              order = 1 },
+    { key = "gruul",   name = "Gruul's Lair",          order = 2 },
+    { key = "mag",     name = "Magtheridon's Lair",    order = 3 },
+    { key = "ssc",     name = "Serpentshrine Cavern",  order = 4 },
+    { key = "tk",      name = "Tempest Keep",          order = 5 },
+    { key = "za",      name = "Zul'Aman",              order = 6 },
+    { key = "hyjal",   name = "Hyjal Summit",          order = 7 },
+    { key = "bt",      name = "Black Temple",          order = 8 },
+    { key = "swp",     name = "Sunwell Plateau",       order = 9 },
+
+    -- 5-man dungeons. Gated on HH.db.settings.dungeonPullAlerts via the
+    -- isDungeon flag, which GetTriggerConfig checks when resolving.
+    { key = "hfr",     name = "D: Hellfire Ramparts",  order = 100, isDungeon = true },
+    { key = "bf",      name = "D: Blood Furnace",      order = 101, isDungeon = true },
+    { key = "sh",      name = "D: Shattered Halls",    order = 102, isDungeon = true },
+    { key = "sp",      name = "D: Slave Pens",         order = 110, isDungeon = true },
+    { key = "ub",      name = "D: Underbog",           order = 111, isDungeon = true },
+    { key = "sv",      name = "D: Steamvault",         order = 112, isDungeon = true },
+    { key = "mt",      name = "D: Mana-Tombs",         order = 120, isDungeon = true },
+    { key = "ac",      name = "D: Auchenai Crypts",    order = 121, isDungeon = true },
+    { key = "seth",    name = "D: Sethekk Halls",      order = 122, isDungeon = true },
+    { key = "slab",    name = "D: Shadow Labyrinth",   order = 123, isDungeon = true },
+    { key = "ohf",     name = "D: Old Hillsbrad",      order = 130, isDungeon = true },
+    { key = "bm",      name = "D: The Black Morass",   order = 131, isDungeon = true },
+    { key = "mech",    name = "D: The Mechanar",       order = 140, isDungeon = true },
+    { key = "bot",     name = "D: The Botanica",       order = 141, isDungeon = true },
+    { key = "arc",     name = "D: The Arcatraz",       order = 142, isDungeon = true },
 }
 
 -- ============================================================================
@@ -188,6 +207,106 @@ DB.BOSSES = {
             [4] = "Unleash the fury",                    -- final burn phase
         },
     },
+
+    -- ============================================================================
+    -- 5-MAN DUNGEONS
+    -- ============================================================================
+    -- Dungeon fights are short — "pull" is the right default for every boss;
+    -- the execute / phase windows that matter in raids don't apply here.
+    -- Every entry is flagged isDungeon = true so GetTriggerConfig can gate
+    -- them behind the dungeonPullAlerts setting as a single on/off switch.
+    -- Magister's Terrace's Kael'thas Sunstrider is intentionally omitted:
+    -- the name collides with Tempest Keep's Kael'thas and Detection has no
+    -- zone awareness yet.
+
+    -- ==================== HELLFIRE CITADEL ====================
+    ["hfr_gargolmar"]   = { raidKey = "hfr",  isDungeon = true, name = "Watchkeeper Gargolmar",  default = { type = "pull" } },
+    ["hfr_omor"]        = { raidKey = "hfr",  isDungeon = true, name = "Omor the Unscarred",     default = { type = "pull" } },
+    ["hfr_vazruden"]    = { raidKey = "hfr",  isDungeon = true, name = "Vazruden the Herald",    aliases = { "Vazruden", "Nazan" }, default = { type = "pull" } },
+
+    ["bf_maker"]        = { raidKey = "bf",   isDungeon = true, name = "The Maker",               default = { type = "pull" } },
+    ["bf_broggok"]      = { raidKey = "bf",   isDungeon = true, name = "Broggok",                 default = { type = "pull" } },
+    ["bf_kelidan"]      = { raidKey = "bf",   isDungeon = true, name = "Keli'dan the Breaker",    default = { type = "pull" } },
+
+    -- Nethekurse heals himself off the dying Shadow Cleft adds; at 20% he
+    -- stops healing and the real burn window opens. BL on the execute, not
+    -- on the pull, otherwise haste is wasted on regenerated HP.
+    ["sh_nethekurse"]   = { raidKey = "sh",   isDungeon = true, name = "Grand Warlock Nethekurse", default = { type = "hp", hp = 20 } },
+    ["sh_omrogg"]       = { raidKey = "sh",   isDungeon = true, name = "Warbringer O'mrogg",       default = { type = "pull" } },
+    ["sh_kargath"]      = { raidKey = "sh",   isDungeon = true, name = "Warchief Kargath Bladefist", default = { type = "pull" } },
+
+    -- ==================== COILFANG RESERVOIR ====================
+    ["sp_mennu"]        = { raidKey = "sp",   isDungeon = true, name = "Mennu the Betrayer",      default = { type = "pull" } },
+    ["sp_rokmar"]       = { raidKey = "sp",   isDungeon = true, name = "Rokmar the Crackler",     default = { type = "pull" } },
+    ["sp_quagmirran"]   = { raidKey = "sp",   isDungeon = true, name = "Quagmirran",              default = { type = "pull" } },
+
+    ["ub_hungarfen"]    = { raidKey = "ub",   isDungeon = true, name = "Hungarfen",               default = { type = "pull" } },
+    ["ub_ghazan"]       = { raidKey = "ub",   isDungeon = true, name = "Ghaz'an",                 default = { type = "pull" } },
+    ["ub_muselek"]      = { raidKey = "ub",   isDungeon = true, name = "Swamplord Musel'ek",      default = { type = "pull" } },
+    ["ub_blackstalker"] = { raidKey = "ub",   isDungeon = true, name = "The Black Stalker",       default = { type = "pull" } },
+
+    ["sv_thespia"]      = { raidKey = "sv",   isDungeon = true, name = "Hydromancer Thespia",     default = { type = "pull" } },
+    ["sv_steamrigger"]  = { raidKey = "sv",   isDungeon = true, name = "Mekgineer Steamrigger",   default = { type = "pull" } },
+    ["sv_kalithresh"]   = { raidKey = "sv",   isDungeon = true, name = "Warlord Kalithresh",      default = { type = "pull" } },
+
+    -- ==================== AUCHINDOUN ====================
+    ["mt_pandemonius"]  = { raidKey = "mt",   isDungeon = true, name = "Pandemonius",             default = { type = "pull" } },
+    ["mt_tavarok"]      = { raidKey = "mt",   isDungeon = true, name = "Tavarok",                 default = { type = "pull" } },
+    ["mt_shaffar"]      = { raidKey = "mt",   isDungeon = true, name = "Nexus-Prince Shaffar",    default = { type = "pull" } },
+
+    ["ac_shirrak"]      = { raidKey = "ac",   isDungeon = true, name = "Shirrak the Dead Watcher", default = { type = "pull" } },
+    ["ac_maladaar"]     = { raidKey = "ac",   isDungeon = true, name = "Exarch Maladaar",         default = { type = "pull" } },
+
+    ["seth_syth"]       = { raidKey = "seth", isDungeon = true, name = "Darkweaver Syth",         default = { type = "pull" } },
+    -- Ikiss casts Arcane Explosion repeatedly under 25% — the iconic burn
+    -- window that beats kiting through the explosion phase.
+    ["seth_ikiss"]      = { raidKey = "seth", isDungeon = true, name = "Talon King Ikiss",        default = { type = "hp", hp = 25 } },
+
+    ["slab_hellmaw"]    = { raidKey = "slab", isDungeon = true, name = "Ambassador Hellmaw",      default = { type = "pull" } },
+    ["slab_blackheart"] = { raidKey = "slab", isDungeon = true, name = "Blackheart the Inciter",  default = { type = "pull" } },
+    ["slab_vorpil"]     = { raidKey = "slab", isDungeon = true, name = "Grandmaster Vorpil",      default = { type = "pull" } },
+    -- The classic heroic Murmur call: BL after the first Sonic Boom to
+    -- skip the second one entirely. ~40% HP lines up with the post-boom
+    -- burn window for a normal-paced group.
+    ["slab_murmur"]     = { raidKey = "slab", isDungeon = true, name = "Murmur",                  default = { type = "hp", hp = 40 } },
+
+    -- ==================== CAVERNS OF TIME ====================
+    ["ohf_drake"]       = { raidKey = "ohf",  isDungeon = true, name = "Lieutenant Drake",        default = { type = "pull" } },
+    ["ohf_skarloc"]     = { raidKey = "ohf",  isDungeon = true, name = "Captain Skarloc",         default = { type = "pull" } },
+    ["ohf_epoch"]       = { raidKey = "ohf",  isDungeon = true, name = "Epoch Hunter",            default = { type = "pull" } },
+
+    ["bm_deja"]         = { raidKey = "bm",   isDungeon = true, name = "Chrono Lord Deja",        default = { type = "pull" } },
+    ["bm_temporus"]     = { raidKey = "bm",   isDungeon = true, name = "Temporus",                default = { type = "pull" } },
+    ["bm_aeonus"]       = { raidKey = "bm",   isDungeon = true, name = "Aeonus",                  default = { type = "pull" } },
+
+    -- ==================== TEMPEST KEEP 5-MANS ====================
+    ["mech_gyro"]       = { raidKey = "mech", isDungeon = true, name = "Gatewatcher Gyro-Kill",   default = { type = "pull" } },
+    ["mech_ironhand"]   = { raidKey = "mech", isDungeon = true, name = "Gatewatcher Iron-Hand",   default = { type = "pull" } },
+    ["mech_capacitus"]  = { raidKey = "mech", isDungeon = true, name = "Mechano-Lord Capacitus",  default = { type = "pull" } },
+    ["mech_sepethrea"]  = { raidKey = "mech", isDungeon = true, name = "Nethermancer Sepethrea",  default = { type = "pull" } },
+    -- Pathaleon enrages at 20% — the canonical execute window for the
+    -- final Mechanar boss.
+    ["mech_pathaleon"]  = { raidKey = "mech", isDungeon = true, name = "Pathaleon the Calculator", default = { type = "hp", hp = 20 } },
+
+    ["bot_sarannis"]    = { raidKey = "bot",  isDungeon = true, name = "Commander Sarannis",      default = { type = "pull" } },
+    ["bot_freywinn"]    = { raidKey = "bot",  isDungeon = true, name = "High Botanist Freywinn",  default = { type = "pull" } },
+    ["bot_thorngrin"]   = { raidKey = "bot",  isDungeon = true, name = "Thorngrin the Tender",    default = { type = "pull" } },
+    ["bot_laj"]         = { raidKey = "bot",  isDungeon = true, name = "Laj",                     default = { type = "pull" } },
+    ["bot_warpsplinter"]= { raidKey = "bot",  isDungeon = true, name = "Warp Splinter",           default = { type = "pull" } },
+
+    ["arc_zereketh"]    = { raidKey = "arc",  isDungeon = true, name = "Zereketh the Unbound",    default = { type = "pull" } },
+    ["arc_dalliah"]     = { raidKey = "arc",  isDungeon = true, name = "Dalliah the Doomsayer",   default = { type = "pull" } },
+    ["arc_soccothrates"]= { raidKey = "arc",  isDungeon = true, name = "Wrath-Scryer Soccothrates", default = { type = "pull" } },
+    -- Skyriss splits into illusions at 66% (phase 2) and again at 33%
+    -- (phase 3). The 66% split is the standard BL call — burn the real
+    -- Skyriss + illusions before the second split makes it chaotic.
+    ["arc_skyriss"]     = { raidKey = "arc",  isDungeon = true, name = "Harbinger Skyriss",
+        default = { type = "phase", phase = 2 },
+        yells = {
+            [2] = "I'll rip the flesh from your bones",
+            [3] = "Not again! I will not be touched by you rabble",
+        },
+    },
 }
 
 -- ============================================================================
@@ -223,10 +342,17 @@ function DB:Get(id)
 end
 
 -- Returns the effective trigger config for a boss (user override merged on top
--- of the database default).
+-- of the database default). Returns nil if the boss is explicitly disabled,
+-- or if it's a 5-man dungeon boss and the dungeon-pull-alerts master toggle
+-- is off (the feature opts in as a whole via HH.db.settings.dungeonPullAlerts).
 function DB:GetTriggerConfig(id)
     local boss = DB.BOSSES[id]
     if not boss then return nil end
+
+    if boss.isDungeon
+       and not (HH.db and HH.db.settings and HH.db.settings.dungeonPullAlerts) then
+        return nil -- dungeon alerts master-disabled
+    end
 
     local override = HH.chardb and HH.chardb.bosses and HH.chardb.bosses[id]
     if override and override.enabled == false then

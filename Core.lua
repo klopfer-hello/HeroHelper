@@ -99,6 +99,13 @@ local defaultDB = {
         showMinimap   = true,
         minimapAngle  = 225,
         debug         = false,
+        -- Master toggle for 5-man dungeon boss alerts. Off by default so
+        -- players who installed HeroHelper for raid content don't suddenly
+        -- start getting BL reminders on Hellfire Ramparts trash. When on,
+        -- every TBC dungeon boss fires a "pull" trigger (the default);
+        -- individual dungeon bosses can still be overridden via the
+        -- Bosses config tab like raid bosses.
+        dungeonPullAlerts = false,
     },
 }
 
