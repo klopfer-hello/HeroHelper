@@ -27,6 +27,9 @@ HH.ReminderButton = {}
 local RB = HH.ReminderButton
 
 local button
+-- True while TestShow() is displaying a preview reminder. Suppresses the cast
+-- macro so clicking / dragging the preview button never actually fires BL/Hero.
+local testMode = false
 
 -- ============================================================================
 -- Sound registration
@@ -205,30 +208,44 @@ function RB:ApplyLock()
     if not button then return end
     local locked = HH.chardb.settings.button.locked
     button:SetMovable(not locked)
-    -- When locked we still need the button clickable; disable only the drag.
     if locked then
         button:RegisterForDrag() -- unregister drag
     else
         button:RegisterForDrag("LeftButton")
     end
+    -- Lock state changes what the button does on click (real cast vs no-op),
+    -- so the secure macrotext has to be refreshed.
+    self:ApplyMacrotext()
 end
 
--- Set the secure macrotext for the cast. This must be called outside of
--- combat. We refresh on login (when HH.State.spellName is known) and whenever
--- the user edits the override in the config panel.
+-- Set the secure macrotext for the cast. Must be called outside of combat.
+--
+-- The button is **only** armed to cast when it is locked in place and not in
+-- test mode. When unlocked, clicks must be no-ops so the user can freely
+-- left-click-drag the button without accidentally burning BL/Hero. The same
+-- applies to TestShow(): a preview must never fire the spell.
 function RB:ApplyMacrotext()
     if not button then return end
     if InCombatLockdown() then return end
-    local override = HH.chardb.settings.macrotext
+
+    local locked = HH.chardb.settings.button.locked
+    local armed  = locked and not testMode and HH.State.spellName ~= nil
+
     local text
-    if override and override ~= "" then
-        text = override
-    elseif HH.State.spellName then
-        text = "/cast [@player] " .. HH.State.spellName
+    if armed then
+        local override = HH.chardb.settings.macrotext
+        if override and override ~= "" then
+            text = override
+        else
+            text = "/cast [@player] " .. HH.State.spellName
+        end
     else
-        text = "/run print('HeroHelper: no BL/Hero spell available')"
+        -- Empty macrotext = click does nothing. Using "" rather than nil so
+        -- the attribute is explicitly cleared.
+        text = ""
     end
     button:SetAttribute("macrotext1", text)
+
     -- Refresh icon as well (faction may have been unknown at first init)
     if HH.State.spellID then
         local tex = select(3, GetSpellInfo(HH.State.spellID))
@@ -242,9 +259,10 @@ end
 
 function RB:Show()
     if not button then return end
-    if InCombatLockdown() then
-        -- Can't change secure button properties in combat, but Show() is fine
-    end
+    -- If a real trigger fires while a test is still up (e.g. the player
+    -- pulls mid-test), exit test mode first so the button is armed for the
+    -- real fight.
+    if testMode then self:_ExitTestMode() end
     button.label:SetText(HH.State.currentBossName or "HeroHelper")
     button:Show()
     self:PlaySound()
@@ -253,18 +271,43 @@ end
 function RB:Hide()
     if not button then return end
     button:Hide()
+    if testMode then self:_ExitTestMode() end
 end
 
+-- TestShow forces the button to be moveable and disarmed so the user can
+-- drag a preview reminder into place without accidentally firing BL/Hero.
+-- The real lock / macro state is restored automatically when the preview
+-- ends (via :_ExitTestMode(), called from Hide or a new Show).
 function RB:TestShow()
-    -- Outside combat we can freely refresh everything.
-    self:ApplyMacrotext()
     if not button then return end
+    if InCombatLockdown() then
+        HH:Print("Cannot test while in combat.", HH.Colors.warning)
+        return
+    end
+
+    testMode = true
+
+    -- Force-enable drag regardless of the saved lock state
+    button:SetMovable(true)
+    button:RegisterForDrag("LeftButton")
+
+    -- ApplyMacrotext sees testMode == true and clears macrotext1 to ""
+    self:ApplyMacrotext()
+
     button.label:SetText("TEST")
     button:Show()
     self:PlaySound()
+
     C_Timer.After(4, function()
         if not HH.State.inCombat then self:Hide() end
     end)
+end
+
+function RB:_ExitTestMode()
+    testMode = false
+    if InCombatLockdown() then return end
+    -- Restore the real lock + macro state from the saved variables.
+    self:ApplyLock()
 end
 
 function RB:PlaySound()

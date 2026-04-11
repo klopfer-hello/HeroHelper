@@ -107,7 +107,11 @@ local defaultCharDB = {
     settings = {
         -- Reminder button
         button = {
-            locked       = false,
+            -- Locked by default so the button is immediately armed to cast.
+            -- Use /hh unlock (or the config checkbox) to reposition it, then
+            -- re-lock when done. /hh test temporarily force-unlocks so you
+            -- can drag a preview button into place.
+            locked       = true,
             size         = 40,
             -- Point on screen (nil until the user drags the button)
             point        = "CENTER",
