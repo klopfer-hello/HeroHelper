@@ -1199,9 +1199,15 @@ local function CreateCompoundPopup()
     -- so we MUST NOT anchor the value editors to the checkbox's right
     -- edge — they'd overflow the popup. Instead pin the suffix label
     -- to the popup's right edge and chain the edit box from its left.
+    --
+    -- MakeCheckbox only installs its toggle OnClick handler when you
+    -- call :HookClick(fn). We don't need a callback (the popup reads
+    -- :GetChecked() at Save time), but we MUST call HookClick with a
+    -- no-op so the visual toggle actually works on click.
     local function MakeRow(parent, labelText, withEdit, suffix, yOffset)
         local cb = MakeCheckbox(parent, labelText)
         cb:SetPoint("TOPLEFT", parent, "TOPLEFT", PADDING, yOffset)
+        cb:HookClick(function() end) -- arm the toggle; no callback needed
 
         local edit, suffixLbl
         if withEdit then
