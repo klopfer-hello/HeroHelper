@@ -522,45 +522,99 @@ function Config:BuildGeneralTab(panel)
     end)
     y = y - ROW_HEIGHT
 
-    -- Sound dropdown — ask ReminderButton for the list so we see our built-in
-    -- entries plus any extras from other LSM-using addons. We deliberately do
-    -- NOT use LSM:List("sound") directly here because LibSharedMedia rejects
-    -- any sound path that doesn't start with "Interface\" (so our built-in
-    -- "Sound\Interface\..." paths are never added to the LSM list).
-    -- Selecting an entry both saves it and plays a one-shot preview so the
-    -- user can audition the sound without having to hit the Preview button.
+    -- Inline sound picker.
     --
-    -- IMPORTANT: anchor the dropdown to a label with ("LEFT", label, "RIGHT",
-    -- ...) rather than directly to the panel. The working raid dropdown on
-    -- the Bosses tab uses this exact pattern, and anchoring to panel TOPLEFT
-    -- with a -16 X offset (the previous shape) somehow leaves the arrow
-    -- button non-clickable even though LibUIDropDownMenu is in use.
-    local soundLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    soundLabel:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, y - 4)
-    soundLabel:SetText("Sound:")
-    soundLabel:SetTextColor(D.label[1], D.label[2], D.label[3])
+    -- We deliberately do NOT use a UIDropDownMenu here — LibUIDropDownMenu's
+    -- shared list frame leaked buttons from previously-initialized dropdowns
+    -- into the sound menu on the live client (5 sounds + 4 stale raid names,
+    -- see the git log for the long debugging story). With only ~5 built-in
+    -- sounds to pick from, showing all rows inline is both simpler and a
+    -- better UX: you can see every option at once, there's no menu-open
+    -- animation, and each row has its own 🔊 preview button. Pattern adapted
+    -- from NovaWorldBuffs' LSM30_Sound widget (the check / text / speaker
+    -- row layout) but built with plain CreateFrame so we don't depend on
+    -- AceGUI.
+    local soundRows   = {}
+    local ROW_H       = 20
+    local ROW_INDENT  = 8
 
-    local soundItems = {}
+    local function RefreshSoundRowSelection()
+        local saved = HH.chardb.settings.sound
+        for _, row in ipairs(soundRows) do
+            if row.key == saved then
+                row.check:Show()
+                row.text:SetTextColor(D.accent[1], D.accent[2], D.accent[3])
+            else
+                row.check:Hide()
+                row.text:SetTextColor(D.value[1], D.value[2], D.value[3])
+            end
+        end
+    end
+
     local soundList = (HH.ReminderButton and HH.ReminderButton:GetSoundList())
         or { "HeroHelper: Raid Warning" }
     for _, key in ipairs(soundList) do
-        table.insert(soundItems, { label = key, value = key })
-    end
-    local soundDD = MakeDropdown(panel, 200, soundItems, function(value)
-        HH.chardb.settings.sound = value
-        if HH.ReminderButton then HH.ReminderButton:PreviewSound() end
-    end, HH.chardb.settings.sound or "HeroHelper: Raid Warning", "sound")
-    soundDD:SetPoint("LEFT", soundLabel, "RIGHT", 4, -2)
-    y = y - (ROW_HEIGHT + 6)
+        local row = CreateFrame("Button", nil, panel)
+        row:SetSize(FRAME_WIDTH - 2*PADDING - 20, ROW_H)
+        row:SetPoint("TOPLEFT", panel, "TOPLEFT", ROW_INDENT, y)
 
-    -- Preview always plays, regardless of the "Play sound on trigger" flag —
-    -- otherwise the user can't audition a sound while the feature is off.
-    local previewBtn = MakeFlatButton(panel, "Preview sound", 120, 22)
-    previewBtn:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, y)
-    previewBtn:SetScript("OnClick", function()
-        if HH.ReminderButton then HH.ReminderButton:PreviewSound() end
-    end)
-    y = y - ROW_HEIGHT
+        -- Hover highlight (whole row). Clicking the row anywhere outside
+        -- the speaker button selects this sound.
+        local hi = row:CreateTexture(nil, "HIGHLIGHT")
+        hi:SetAllPoints()
+        hi:SetColorTexture(D.accent[1], D.accent[2], D.accent[3], 0.15)
+
+        -- Left-edge check mark, shown only on the currently selected row.
+        local check = row:CreateTexture(nil, "ARTWORK")
+        check:SetSize(12, 12)
+        check:SetPoint("LEFT", row, "LEFT", 2, 0)
+        check:SetTexture("Interface\\Buttons\\UI-CheckBox-Check")
+        check:Hide()
+        row.check = check
+
+        -- Right-edge speaker button: previews the sound without changing
+        -- the selection. Handy for auditioning alternatives before you
+        -- commit to one.
+        local speaker = CreateFrame("Button", nil, row)
+        speaker:SetSize(16, 16)
+        speaker:SetPoint("RIGHT", row, "RIGHT", -4, 0)
+        local spkTex = speaker:CreateTexture(nil, "ARTWORK")
+        spkTex:SetAllPoints()
+        spkTex:SetTexture("Interface\\Common\\VoiceChat-Speaker")
+        speaker:SetHighlightTexture("Interface\\Common\\VoiceChat-On")
+        speaker:SetScript("OnClick", function()
+            -- Temporarily swap the saved sound so PreviewSound plays this
+            -- specific row's sound, then restore. PreviewSound always reads
+            -- HH.chardb.settings.sound, so this is the simplest way to
+            -- audition a *different* sound without selecting it.
+            local prev = HH.chardb.settings.sound
+            HH.chardb.settings.sound = key
+            if HH.ReminderButton then HH.ReminderButton:PreviewSound() end
+            HH.chardb.settings.sound = prev
+        end)
+
+        local text = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        text:SetPoint("LEFT", check, "RIGHT", 6, 0)
+        text:SetPoint("RIGHT", speaker, "LEFT", -6, 0)
+        text:SetJustifyH("LEFT")
+        text:SetText(key)
+        text:SetTextColor(D.value[1], D.value[2], D.value[3])
+        row.text = text
+        row.key  = key
+
+        row:SetScript("OnClick", function()
+            HH.chardb.settings.sound = key
+            if HH.ReminderButton then HH.ReminderButton:PreviewSound() end
+            RefreshSoundRowSelection()
+        end)
+
+        table.insert(soundRows, row)
+        y = y - ROW_H
+    end
+    -- Small trailing gap after the list.
+    y = y - 4
+
+    RefreshSoundRowSelection()
 
     -- Sync checkbox visuals to live saved-variable state each time the panel
     -- is shown. The checkboxes are purely visual — HookClick handles writes,
@@ -571,10 +625,7 @@ function Config:BuildGeneralTab(panel)
         cbLocked:SetChecked(HH.chardb.settings.button.locked)
         cbSoundEnabled:SetChecked(HH.chardb.settings.soundEnabled)
         cbTest:SetChecked(HH.ReminderButton and HH.ReminderButton:IsTestMode() or false)
-        -- Dropdown text is not auto-synced from saved variables; refresh it
-        -- here so reopening the panel after a selection shows the right
-        -- label instead of whatever was baked in at construction time.
-        soundDD:RefreshText(HH.chardb.settings.sound or "HeroHelper: Raid Warning")
+        RefreshSoundRowSelection()
     end)
 end
 
