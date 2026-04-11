@@ -20,7 +20,15 @@ local ADDON_NAME, HH = ...
 HH.Config = {}
 local Config = HH.Config
 
-local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
+local LSM   = LibStub and LibStub("LibSharedMedia-3.0", true)
+-- LibUIDropDownMenu-4.0 is a drop-in replacement for Blizzard's
+-- UIDropDownMenuTemplate. Required in TBC Classic 2.5.5 because the
+-- native UIDropDownMenuTemplate from the stock client is tainted / buggy:
+-- items display but clicks on them don't register, making it impossible
+-- to change the selection. Every major TBC addon with working dropdowns
+-- (LoonBestInSlot, Questie, WeakAuras, RXPGuides, ProEnchanters, …)
+-- ships this same lib for the same reason.
+local LibDD = LibStub and LibStub("LibUIDropDownMenu-4.0", true)
 
 -- UI constants
 local FRAME_WIDTH  = 460
@@ -198,29 +206,70 @@ local function MakeSlider(parent, label, min, max, step, initial, onChange)
     return container
 end
 
--- Simple dropdown via UIDropDownMenu (still available in TBC). UIDropDownMenu
--- needs a globally unique frame name, so we generate one per call via a
--- monotonic counter.
+-- Dropdown built on LibUIDropDownMenu-4.0 (see the LibDD require at the top
+-- of this file for *why* we can't use the native template). LibDD mirrors
+-- the Blizzard API with lib:-prefixed methods, so the call sites look
+-- almost identical to the old UIDropDownMenu version — the important
+-- difference is that clicks on menu items actually register.
+--
+-- Each dropdown needs a globally unique frame name, so we generate one per
+-- call via a monotonic counter.
 local dropdownCounter = 0
 local function MakeDropdown(parent, width, items, onSelect, initialText)
     dropdownCounter = dropdownCounter + 1
-    local dd = CreateFrame("Frame", "HeroHelperDropdown" .. dropdownCounter, parent, "UIDropDownMenuTemplate")
-    UIDropDownMenu_SetWidth(dd, width)
-    UIDropDownMenu_SetText(dd, initialText or "")
+    local name = "HeroHelperDropdown" .. dropdownCounter
 
-    UIDropDownMenu_Initialize(dd, function(self, level)
-        for _, entry in ipairs(items) do
-            local info = UIDropDownMenu_CreateInfo()
-            info.text     = entry.label
-            info.value    = entry.value
-            info.checked  = false
-            info.func = function()
-                UIDropDownMenu_SetText(dd, entry.label)
-                if onSelect then onSelect(entry.value, entry.label) end
+    -- Fallback: if LibDD failed to load (shouldn't happen because we embed
+    -- it, but defensive anyway), fall back to the native template so the
+    -- addon at least loads without errors.
+    local dd
+    if LibDD then
+        dd = LibDD:Create_UIDropDownMenu(name, parent)
+        LibDD:UIDropDownMenu_SetWidth(dd, width)
+        LibDD:UIDropDownMenu_SetText(dd, initialText or "")
+
+        LibDD:UIDropDownMenu_Initialize(dd, function(self, level)
+            for _, entry in ipairs(items) do
+                local info = LibDD:UIDropDownMenu_CreateInfo()
+                info.text         = entry.label
+                info.value        = entry.value
+                info.notCheckable = true
+                info.func = function()
+                    LibDD:UIDropDownMenu_SetText(dd, entry.label)
+                    if onSelect then onSelect(entry.value, entry.label) end
+                end
+                LibDD:UIDropDownMenu_AddButton(info, level)
             end
-            UIDropDownMenu_AddButton(info, level)
+        end)
+    else
+        dd = CreateFrame("Frame", name, parent, "UIDropDownMenuTemplate")
+        UIDropDownMenu_SetWidth(dd, width)
+        UIDropDownMenu_SetText(dd, initialText or "")
+        UIDropDownMenu_Initialize(dd, function(self, level)
+            for _, entry in ipairs(items) do
+                local info = UIDropDownMenu_CreateInfo()
+                info.text         = entry.label
+                info.value        = entry.value
+                info.notCheckable = true
+                info.func = function()
+                    UIDropDownMenu_SetText(dd, entry.label)
+                    if onSelect then onSelect(entry.value, entry.label) end
+                end
+                UIDropDownMenu_AddButton(info, level)
+            end
+        end)
+    end
+
+    -- Expose the SetText method on the frame itself so callers (like the
+    -- sound-dropdown OnShow refresh) can update the displayed text without
+    -- needing to know which underlying API was used.
+    function dd:RefreshText(text)
+        if LibDD then
+            LibDD:UIDropDownMenu_SetText(self, text or "")
+        else
+            UIDropDownMenu_SetText(self, text or "")
         end
-    end)
+    end
 
     return dd
 end
@@ -485,7 +534,7 @@ function Config:BuildGeneralTab(panel)
         -- Dropdown text is not auto-synced from saved variables; refresh it
         -- here so reopening the panel after a selection shows the right
         -- label instead of whatever was baked in at construction time.
-        UIDropDownMenu_SetText(soundDD, HH.chardb.settings.sound or "HeroHelper: Raid Warning")
+        soundDD:RefreshText(HH.chardb.settings.sound or "HeroHelper: Raid Warning")
     end)
 end
 
