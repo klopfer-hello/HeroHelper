@@ -30,13 +30,21 @@ local SCAN_UNITS = {
     "boss1", "boss2", "boss3", "boss4", "boss5",
 }
 
--- party/raid targets are added dynamically per scan (indexed by group size)
+-- party/raid targets are added dynamically per scan (indexed by group size).
+-- Supports both the modern (GetNumGroupMembers/IsInRaid) and legacy
+-- (GetNumRaidMembers/GetNumPartyMembers) APIs so the code is robust across
+-- TBC Anniversary client revisions.
 local function AddGroupTargets(list)
-    local n = GetNumGroupMembers and GetNumGroupMembers() or 0
-    if n == 0 and IsInRaid and IsInRaid() then n = GetNumRaidMembers and GetNumRaidMembers() or 0 end
-    local prefix = (IsInRaid and IsInRaid()) and "raid" or "party"
-    for i = 1, n do
-        table.insert(list, prefix .. i .. "target")
+    local raidN  = (GetNumRaidMembers and GetNumRaidMembers()) or 0
+    if raidN > 0 or (IsInRaid and IsInRaid()) then
+        for i = 1, math.max(raidN, (GetNumGroupMembers and GetNumGroupMembers()) or 0) do
+            table.insert(list, "raid" .. i .. "target")
+        end
+        return
+    end
+    local partyN = (GetNumPartyMembers and GetNumPartyMembers()) or ((GetNumGroupMembers and GetNumGroupMembers()) or 0)
+    for i = 1, partyN do
+        table.insert(list, "party" .. i .. "target")
     end
 end
 

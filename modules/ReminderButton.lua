@@ -1,0 +1,283 @@
+--[[
+    HeroHelper - Reminder Button Module
+
+    Creates a single SecureActionButtonTemplate that:
+      * Is hidden by default
+      * Shows only when HEROHELPER_TRIGGER fires (i.e. BL/Hero is castable and
+        it is the right moment according to the per-boss config)
+      * Casts Heroism / Bloodlust on left-click via a secure macrotext
+      * Is movable when unlocked, locked in place when locked
+      * Supports per-character position and size (default 40x40)
+      * Pulses / glows while visible so the player can't miss it
+      * Plays a SharedMedia sound (selectable in the config) on trigger
+      * Auto-hides after a successful cast OR when combat ends OR when the
+        Sated/Exhaustion debuff is detected on the player
+
+    Implementation notes for TBC Classic Anniversary:
+      * We must set the secure attributes outside combat lockdown. The
+        button's macrotext is set once in Initialize() and never changes
+        during combat, so this is safe.
+      * The glow is achieved by animating a texture on OnUpdate — no
+        blizzard glow template is needed for TBC.
+]]
+
+local ADDON_NAME, HH = ...
+
+HH.ReminderButton = {}
+local RB = HH.ReminderButton
+
+local button
+
+-- ============================================================================
+-- Sound registration
+-- ============================================================================
+
+local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
+
+local function RegisterSounds()
+    if not LSM then return end
+    -- Built-in WoW sounds that work reliably in TBC Anniversary. Each entry
+    -- is a (key -> sound file) pair. Keys are shown in the config dropdown.
+    local sounds = {
+        ["HeroHelper: Raid Warning"] = "Sound\\Interface\\RaidWarning.ogg",
+        ["HeroHelper: Ready Check"]  = "Sound\\Interface\\ReadyCheck.ogg",
+        ["HeroHelper: Alarm Clock"]  = "Sound\\Interface\\AlarmClockWarning3.ogg",
+        ["HeroHelper: Level Up"]     = "Sound\\Interface\\LevelUp.ogg",
+        ["HeroHelper: PvP Flag"]     = "Sound\\Spells\\PVPFlagTaken.ogg",
+    }
+    for key, file in pairs(sounds) do
+        LSM:Register("sound", key, file)
+    end
+end
+
+function RB:GetSoundList()
+    if not LSM then return { "HeroHelper: Raid Warning" } end
+    return LSM:List("sound")
+end
+
+-- ============================================================================
+-- Button creation
+-- ============================================================================
+
+function RB:Initialize()
+    RegisterSounds()
+    self:CreateButton()
+    self:ApplyPosition()
+    self:ApplySize()
+    self:ApplyLock()
+    self:ApplyMacrotext()
+
+    -- Event subscriptions
+    HH.Events:On("HEROHELPER_TRIGGER", function() RB:Show() end)
+    HH.Events:On("COMBAT_END",          function() RB:Hide() end)
+    HH.Events:On("PLAYER_LOGIN",        function() RB:ApplyMacrotext() end)
+    HH.Events:On("PLAYER_ENTERING_WORLD", function() RB:ApplyMacrotext() end)
+    HH.Events:On("PLAYER_AURA_CHANGED", function()
+        if HH.chardb.settings.hideOnDebuff and HH:HasExhaustionDebuff() then
+            RB:Hide()
+        end
+    end)
+    HH.Events:On("COOLDOWN_CHANGED", function()
+        -- If BL/Hero actually went on cooldown (i.e. we successfully cast),
+        -- schedule a fade-out.
+        if button and button:IsShown() and HH:IsSpellOnCooldown() then
+            local fade = HH.chardb.settings.postCastFade or 2
+            C_Timer.After(fade, function() RB:Hide() end)
+        end
+    end)
+end
+
+function RB:CreateButton()
+    if button then return end
+
+    button = CreateFrame("Button", "HeroHelperReminderButton", UIParent, "SecureActionButtonTemplate")
+    button:SetFrameStrata("HIGH")
+    button:SetFrameLevel(100)
+    button:SetClampedToScreen(true)
+    button:RegisterForClicks("AnyUp", "AnyDown")
+    button:RegisterForDrag("LeftButton")
+    button:EnableMouse(true)
+    button:Hide()
+
+    -- Icon
+    local icon = button:CreateTexture(nil, "ARTWORK")
+    icon:SetAllPoints(button)
+    -- Use the player's faction spell icon
+    local spellID = HH.State.spellID or HH.SPELL_HEROISM
+    local spellTexture = select(3, GetSpellInfo(spellID)) or "Interface\\Icons\\Spell_Nature_Bloodlust"
+    icon:SetTexture(spellTexture)
+    icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    button.icon = icon
+
+    -- Border (thin gold edge to separate from background)
+    local border = button:CreateTexture(nil, "OVERLAY")
+    border:SetAllPoints(button)
+    border:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
+    border:SetBlendMode("ADD")
+    border:SetVertexColor(1, 0.6, 0, 1)
+    button.border = border
+
+    -- Pulse overlay (animated via OnUpdate). We use the action button border
+    -- with ADD blend — it is guaranteed present in every client build.
+    local pulse = button:CreateTexture(nil, "OVERLAY")
+    pulse:SetPoint("CENTER", button, "CENTER")
+    pulse:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
+    pulse:SetBlendMode("ADD")
+    pulse:SetVertexColor(1, 0.8, 0.2, 1)
+    button.pulse = pulse
+
+    -- Label (boss name beneath)
+    local label = button:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    label:SetPoint("BOTTOM", button, "TOP", 0, 4)
+    label:SetTextColor(1, 0.82, 0)
+    button.label = label
+
+    -- Secure macrotext: cast Heroism or Bloodlust at the player
+    button:SetAttribute("type1", "macro")
+
+    -- Drag handlers (only active when unlocked)
+    button:SetScript("OnDragStart", function(self)
+        if not HH.chardb.settings.button.locked then
+            self:StartMoving()
+        end
+    end)
+    button:SetScript("OnDragStop", function(self)
+        self:StopMovingOrSizing()
+        local point, _, relativePoint, x, y = self:GetPoint()
+        HH.chardb.settings.button.point         = point
+        HH.chardb.settings.button.relativePoint = relativePoint
+        HH.chardb.settings.button.x             = x
+        HH.chardb.settings.button.y             = y
+    end)
+
+    button:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:SetText("|cFFFF7D1AHeroHelper|r", 1, 1, 1)
+        if HH.State.spellName then
+            GameTooltip:AddLine("Click to cast " .. HH.State.spellName, 1, 1, 1)
+        else
+            GameTooltip:AddLine("No Heroism/Bloodlust known", 1, 0.3, 0.3)
+        end
+        if HH.State.currentBossName then
+            GameTooltip:AddLine("Trigger: " .. HH.State.currentBossName, 0.7, 0.7, 0.7)
+        end
+        if not HH.chardb.settings.button.locked then
+            GameTooltip:AddLine("Drag to move", 0.5, 0.5, 0.5)
+        end
+        GameTooltip:Show()
+    end)
+    button:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    -- Pulse animation — driven manually via OnUpdate so we have no template
+    -- dependencies on blizzard animation groups (not reliable in TBC).
+    local elapsed = 0
+    button:SetScript("OnUpdate", function(self, e)
+        if not self.pulse:IsShown() then return end
+        elapsed = elapsed + e
+        local scale = 1 + 0.15 * math.sin(elapsed * 5)
+        self.pulse:SetScale(scale)
+        self.pulse:SetAlpha(0.6 + 0.4 * math.sin(elapsed * 5))
+    end)
+end
+
+-- ============================================================================
+-- Apply config
+-- ============================================================================
+
+function RB:ApplyPosition()
+    if not button then return end
+    local s = HH.chardb.settings.button
+    button:ClearAllPoints()
+    button:SetPoint(s.point or "CENTER", UIParent, s.relativePoint or "CENTER", s.x or 0, s.y or 0)
+end
+
+function RB:ApplySize()
+    if not button then return end
+    local size = HH.chardb.settings.button.size or 40
+    button:SetSize(size, size)
+    -- Pulse texture scales with button
+    if button.pulse then
+        button.pulse:SetSize(size * 1.6, size * 1.6)
+    end
+end
+
+function RB:ApplyLock()
+    if not button then return end
+    local locked = HH.chardb.settings.button.locked
+    button:SetMovable(not locked)
+    -- When locked we still need the button clickable; disable only the drag.
+    if locked then
+        button:RegisterForDrag() -- unregister drag
+    else
+        button:RegisterForDrag("LeftButton")
+    end
+end
+
+-- Set the secure macrotext for the cast. This must be called outside of
+-- combat. We refresh on login (when HH.State.spellName is known) and whenever
+-- the user edits the override in the config panel.
+function RB:ApplyMacrotext()
+    if not button then return end
+    if InCombatLockdown() then return end
+    local override = HH.chardb.settings.macrotext
+    local text
+    if override and override ~= "" then
+        text = override
+    elseif HH.State.spellName then
+        text = "/cast [@player] " .. HH.State.spellName
+    else
+        text = "/run print('HeroHelper: no BL/Hero spell available')"
+    end
+    button:SetAttribute("macrotext1", text)
+    -- Refresh icon as well (faction may have been unknown at first init)
+    if HH.State.spellID then
+        local tex = select(3, GetSpellInfo(HH.State.spellID))
+        if tex and button.icon then button.icon:SetTexture(tex) end
+    end
+end
+
+-- ============================================================================
+-- Show / hide
+-- ============================================================================
+
+function RB:Show()
+    if not button then return end
+    if InCombatLockdown() then
+        -- Can't change secure button properties in combat, but Show() is fine
+    end
+    button.label:SetText(HH.State.currentBossName or "HeroHelper")
+    button:Show()
+    self:PlaySound()
+end
+
+function RB:Hide()
+    if not button then return end
+    button:Hide()
+end
+
+function RB:TestShow()
+    -- Outside combat we can freely refresh everything.
+    self:ApplyMacrotext()
+    if not button then return end
+    button.label:SetText("TEST")
+    button:Show()
+    self:PlaySound()
+    C_Timer.After(4, function()
+        if not HH.State.inCombat then self:Hide() end
+    end)
+end
+
+function RB:PlaySound()
+    if not HH.chardb.settings.soundEnabled then return end
+    local key = HH.chardb.settings.sound
+    if not key then return end
+    if LSM then
+        local file = LSM:Fetch("sound", key, true)
+        if file then
+            PlaySoundFile(file, "Master")
+            return
+        end
+    end
+    -- Fallback to a known-good TBC sound ID
+    PlaySound(3081) -- TELLMESSAGE
+end

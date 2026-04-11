@@ -271,12 +271,12 @@ local function InitializeAddon()
     HH:UpdatePlayerCapability()
 
     -- Initialize modules (each registers its own event bus listeners)
-    if HH.Database    and HH.Database:Initialize() then end
-    if HH.Detection   then HH.Detection:Initialize() end
-    if HH.Triggers    then HH.Triggers:Initialize() end
+    if HH.Database       then HH.Database:Initialize() end
+    if HH.Detection      then HH.Detection:Initialize() end
+    if HH.Triggers       then HH.Triggers:Initialize() end
     if HH.ReminderButton then HH.ReminderButton:Initialize() end
-    if HH.Minimap     then HH.Minimap:Initialize() end
-    if HH.Config      then HH.Config:Initialize() end
+    if HH.Minimap        then HH.Minimap:Initialize() end
+    if HH.Config         then HH.Config:Initialize() end
 
     HH.initialized = true
 
