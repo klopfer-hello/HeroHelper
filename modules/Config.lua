@@ -394,7 +394,15 @@ function Config:CreateFrame()
     frame.tabGeneral = tabGeneral
     frame.tabBosses  = tabBosses
 
-    -- Content panels
+    -- Content panels.
+    --
+    -- configState.frame has to be set *before* BuildBossesTab runs — that
+    -- function calls RefreshBossList at the end of setup, and RefreshBossList
+    -- reads the panel via configState.frame.bossPanel. Without this ordering
+    -- the initial refresh no-ops silently and the Bosses tab appears empty
+    -- until the player clicks the raid dropdown once.
+    configState.frame = frame
+
     local generalPanel = CreateFrame("Frame", nil, frame)
     generalPanel:SetPoint("TOPLEFT",  frame, "TOPLEFT",  PADDING, -(PADDING + 54))
     generalPanel:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -PADDING, PADDING)
@@ -408,7 +416,6 @@ function Config:CreateFrame()
     frame.bossPanel = bossPanel
     self:BuildBossesTab(bossPanel)
 
-    configState.frame = frame
     self:SwitchTab("general")
 end
 
