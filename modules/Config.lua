@@ -653,25 +653,52 @@ function Config:BuildBossesTab(panel)
     raidLabel:SetText("Raid:")
     raidLabel:SetTextColor(D.label[1], D.label[2], D.label[3])
 
-    local raidDD = MakeDropdown(panel, 200, raidItems, function(value)
+    -- Width trimmed from 200 to 140 so the top row can also fit the
+    -- Reset / Export / Import buttons on the right without overlap.
+    -- "Serpentshrine Cavern" still fits comfortably at this width.
+    local raidDD = MakeDropdown(panel, 140, raidItems, function(value)
         selectedRaid = value
         Config:RefreshBossList()
     end, HH.Database.RAIDS[1].name, "raid")
     raidDD:SetPoint("LEFT", raidLabel, "RIGHT", 4, -2)
 
-    -- Import / Export buttons (top-right of the bosses tab).
+    -- Reset / Import / Export buttons (top-right of the bosses tab).
     --
-    -- We wrap the click handlers in pcall so any error in ShowExport/Import
-    -- Popup surfaces in chat instead of vanishing silently — a plain
-    -- :SetScript("OnClick", ...) callback that raises will just produce a
-    -- yellow error frame the player may have disabled. The pcall guarantees
-    -- the addon at least tells you *something* happened.
+    -- We wrap the click handlers in pcall so any error surfaces in chat
+    -- instead of vanishing silently — a plain :SetScript("OnClick", ...)
+    -- callback that raises will just produce a yellow error frame the
+    -- player may have disabled. The pcall guarantees the addon at least
+    -- tells you *something* happened.
     local function SafeClick(label, fn)
         local ok, err = pcall(fn)
         if not ok then
             HH:Print(label .. " failed: " .. tostring(err), HH.Colors.error)
         end
     end
+
+    -- StaticPopup confirmation for Reset. Registered once; subsequent
+    -- invocations of BuildBossesTab overwrite the same slot harmlessly.
+    StaticPopupDialogs["HEROHELPER_RESET_BOSSES"] = {
+        text         = "Reset all per-boss HeroHelper settings to defaults?\n\nThis clears every override — HP thresholds, phase picks, disabled flags — for every boss in every raid. The action cannot be undone.",
+        button1      = YES or "Yes",
+        button2      = NO  or "No",
+        OnAccept     = function()
+            HH.chardb.bosses = {}
+            Config:RefreshBossList()
+            HH:Print("All per-boss settings reset to database defaults.", HH.Colors.success)
+        end,
+        timeout      = 0,
+        whileDead    = true,
+        hideOnEscape = true,
+        preferredIndex = 3, -- avoid taint issues with UIParent reparent
+    }
+
+    local resetBtn = MakeFlatButton(panel, "Reset", 55, 22)
+    resetBtn:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -156, 0)
+    resetBtn:RegisterForClicks("LeftButtonUp")
+    resetBtn:SetScript("OnClick", function()
+        SafeClick("Reset", function() StaticPopup_Show("HEROHELPER_RESET_BOSSES") end)
+    end)
 
     local exportBtn = MakeFlatButton(panel, "Export", 70, 22)
     exportBtn:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -80, 0)
@@ -737,12 +764,23 @@ function Config:RefreshBossList()
         -- Current trigger config (merged default + override)
         local cfg = HH.Database:GetTriggerConfig(bossID) or boss.default
 
+        -- "Phase" is only a valid trigger type for bosses that have a
+        -- yell-pattern table in the database — the Triggers module advances
+        -- phase counters by matching boss-yell text against
+        -- Database.yells[phase]. Bosses without a yells table can't be
+        -- phase-detected, so we omit the "Phase" option from their
+        -- dropdowns entirely instead of letting the player pick a trigger
+        -- that would silently never fire.
+        local canPhase = boss.yells ~= nil and next(boss.yells) ~= nil
+
         local typeItems = {
             { label = "Pull",  value = "pull" },
             { label = "HP %",  value = "hp" },
-            { label = "Phase", value = "phase" },
-            { label = "Off",   value = "off" },
         }
+        if canPhase then
+            table.insert(typeItems, { label = "Phase", value = "phase" })
+        end
+        table.insert(typeItems, { label = "Off", value = "off" })
 
         -- HP / Phase edit box (shared slot, switched based on type)
         local edit = CreateFrame("EditBox", nil, row)
@@ -788,10 +826,17 @@ function Config:RefreshBossList()
         edit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
 
         local initialLabel = "Pull"
-        if cfg.type == "hp"    then initialLabel = "HP %"
-        elseif cfg.type == "phase" then initialLabel = "Phase"
-        elseif cfg.type == "off"   then initialLabel = "Off"
+        if cfg.type == "hp" then
+            initialLabel = "HP %"
+        elseif cfg.type == "phase" and canPhase then
+            initialLabel = "Phase"
+        elseif cfg.type == "off" then
+            initialLabel = "Off"
         end
+        -- If a stale saved override says "phase" on a boss that has no
+        -- yells, the Phase option won't be in the dropdown for this boss.
+        -- Leave initialLabel at "Pull" so the dropdown shows a selectable
+        -- state rather than a ghost "Phase" entry the player can't re-pick.
 
         local typeDD = MakeDropdown(row, 80, typeItems, function(value)
             HH.chardb.bosses[bossID] = HH.chardb.bosses[bossID] or {}
