@@ -1157,7 +1157,11 @@ local function CreateCompoundPopup()
 
     local f = CreateFrame("Frame", "HeroHelperCompoundPopup", UIParent,
         BackdropTemplateMixin and "BackdropTemplate" or nil)
-    f:SetSize(360, 230)
+    -- Width: the checkbox helper produces a 260 px hit container, then
+    -- we anchor the value editors to the popup's right edge (with their
+    -- own padding). 420 leaves a comfortable gap between the longest
+    -- checkbox label and the value column.
+    f:SetSize(420, 230)
     f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     f:SetFrameStrata("FULLSCREEN_DIALOG")
     f:SetMovable(true)
@@ -1190,15 +1194,27 @@ local function CreateCompoundPopup()
     subtitle:SetTextColor(D.label[1], D.label[2], D.label[3])
 
     -- Helper to make a "checkbox + optional edit + suffix label" row.
+    --
+    -- The checkbox container from MakeCheckbox is fixed at 260 px wide,
+    -- so we MUST NOT anchor the value editors to the checkbox's right
+    -- edge — they'd overflow the popup. Instead pin the suffix label
+    -- to the popup's right edge and chain the edit box from its left.
     local function MakeRow(parent, labelText, withEdit, suffix, yOffset)
         local cb = MakeCheckbox(parent, labelText)
         cb:SetPoint("TOPLEFT", parent, "TOPLEFT", PADDING, yOffset)
 
         local edit, suffixLbl
         if withEdit then
+            suffixLbl = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            -- yOffset - 11 vertically centers the fontstring on the
+            -- 22 px-tall checkbox row.
+            suffixLbl:SetPoint("RIGHT", parent, "TOPRIGHT", -PADDING, yOffset - 11)
+            suffixLbl:SetText(suffix or "")
+            suffixLbl:SetTextColor(D.label[1], D.label[2], D.label[3])
+
             edit = CreateFrame("EditBox", nil, parent)
             edit:SetSize(40, 20)
-            edit:SetPoint("LEFT", cb, "RIGHT", 110, 0)
+            edit:SetPoint("RIGHT", suffixLbl, "LEFT", -3, 0)
             edit:SetAutoFocus(false)
             edit:SetFontObject("GameFontHighlightSmall")
             edit:SetJustifyH("CENTER")
@@ -1209,11 +1225,6 @@ local function CreateCompoundPopup()
             AddThinBorder(edit, D.border[1], D.border[2], D.border[3], D.borA)
             edit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
             edit:SetScript("OnEnterPressed",  function(self) self:ClearFocus() end)
-
-            suffixLbl = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-            suffixLbl:SetPoint("LEFT", edit, "RIGHT", 3, 0)
-            suffixLbl:SetText(suffix or "")
-            suffixLbl:SetTextColor(D.label[1], D.label[2], D.label[3])
         end
         return cb, edit, suffixLbl
     end
