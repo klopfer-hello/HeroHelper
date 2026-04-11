@@ -452,6 +452,24 @@ SlashCmdList["HEROHELPER"] = function(msg)
         return
     end
 
+    -- /hh mobtest [HP%] — arms the reminder button for the current target
+    -- and fires it when that mob drops below the HP threshold. Toggle off
+    -- with a second /hh mobtest (or it auto-disables on fire / 10-min
+    -- safety timeout). Intentionally command-line only — not surfaced in
+    -- the config panel.
+    if msg == "mobtest" or msg:match("^mobtest%s") then
+        if HH.Triggers and HH.Triggers.IsMobTestActive and HH.Triggers:IsMobTestActive() then
+            HH.Triggers:DisableMobTest()
+            return
+        end
+        local arg = msg:match("^mobtest%s+(%d+)$")
+        local threshold = tonumber(arg) or 50
+        if HH.Triggers and HH.Triggers.EnableMobTest then
+            HH.Triggers:EnableMobTest(threshold)
+        end
+        return
+    end
+
     if msg == "reset" then
         HH.chardb.settings.button.point         = "CENTER"
         HH.chardb.settings.button.relativePoint = "CENTER"
@@ -469,5 +487,6 @@ SlashCmdList["HEROHELPER"] = function(msg)
     HH:Print("  /hh lock | unlock - lock/unlock reminder button")
     HH:Print("  /hh reset       - reset button position")
     HH:Print("  /hh test        - toggle test mode (button stays visible for positioning)")
+    HH:Print("  /hh mobtest [%] - fire reminder when current target drops below HP% (default 50)")
     HH:Print("  /hh debug       - toggle debug output")
 end
