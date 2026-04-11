@@ -259,12 +259,25 @@ function DB:Initialize()
 end
 
 -- ============================================================================
--- Import / Export
+-- Import / Export  (hash format)
 -- ============================================================================
 --
--- Serialization format v1:
+-- Wire format:
 --
---     HH1|<bossID>=<spec>|<bossID>=<spec>|...
+--     HH!<base64 payload>
+--
+-- The base64 payload decodes to plaintext:
+--
+--     HH2|<bossID>=<spec>|<bossID>=<spec>|...
+--
+-- Differences from the legacy HH1 plaintext format:
+--   * HH2 emits **every boss in the database**, not just the user's
+--     overrides. This makes the hash a complete snapshot: importing it
+--     reproduces the sender's effective config exactly, regardless of how
+--     the receiver's addon defaults happen to be tuned.
+--   * The plaintext is wrapped in base64 and prefixed with `HH!` so the
+--     final string is a short opaque "hash" that's safe to paste anywhere
+--     and visually distinct from ordinary chat text.
 --
 -- <spec> is one of:
 --     pull         -> trigger on pull
@@ -272,62 +285,87 @@ end
 --     phase:<N>    -> trigger on phase >= N
 --     off          -> disabled for this boss
 --
--- The format is intentionally plain text, no base64, no Lua code — so it is
--- safe to `loadstring`-free parse, safe to paste into chat, and easy to read
--- by a human. Missing boss IDs fall back to the database default on import.
--- Unknown boss IDs are ignored (forward/backward compatibility).
+-- Backward compatibility: ImportHash also accepts a bare `HH1|...` or
+-- `HH2|...` plaintext string (no HH!/base64 wrapper), so strings produced
+-- by earlier builds keep working.
 
-local EXPORT_VERSION = "HH1"
+local EXPORT_VERSION = "HH2"
+local HASH_PREFIX    = "HH!"
 
-function DB:ExportOverrides()
-    local parts = { EXPORT_VERSION }
-    -- Emit in a stable alphabetical order so two exports of the same config
-    -- produce identical strings.
-    local ids = {}
-    for id in pairs(HH.chardb.bosses or {}) do table.insert(ids, id) end
-    table.sort(ids)
+-- -- Base64 ------------------------------------------------------------------
+--
+-- Tiny pure-Lua base64 so we don't drag in LibCompress. The payload is a
+-- few hundred bytes at most, so math-based bit slicing is perfectly fast.
 
-    for _, id in ipairs(ids) do
-        local o = HH.chardb.bosses[id]
-        if o and DB.BOSSES[id] then
-            local spec
-            if o.enabled == false then
-                spec = "off"
-            elseif o.type == "hp" and o.hp then
-                spec = "hp:" .. tostring(o.hp)
-            elseif o.type == "phase" and o.phase then
-                spec = "phase:" .. tostring(o.phase)
-            elseif o.type == "pull" then
-                spec = "pull"
-            end
-            if spec then
-                table.insert(parts, id .. "=" .. spec)
-            end
+local B64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+local B64_INDEX = {}
+for i = 1, #B64_CHARS do B64_INDEX[B64_CHARS:sub(i, i)] = i - 1 end
+
+local function Base64Encode(str)
+    local out = {}
+    local len = #str
+    local i   = 1
+    while i <= len do
+        local a = str:byte(i)     or 0
+        local b = str:byte(i + 1) or 0
+        local c = str:byte(i + 2) or 0
+        local n = a * 65536 + b * 256 + c
+        local c1 = math.floor(n / 262144)
+        local c2 = math.floor(n / 4096) % 64
+        local c3 = math.floor(n / 64)   % 64
+        local c4 = n % 64
+        out[#out + 1] = B64_CHARS:sub(c1 + 1, c1 + 1)
+        out[#out + 1] = B64_CHARS:sub(c2 + 1, c2 + 1)
+        if i + 1 <= len then
+            out[#out + 1] = B64_CHARS:sub(c3 + 1, c3 + 1)
+        else
+            out[#out + 1] = "="
         end
+        if i + 2 <= len then
+            out[#out + 1] = B64_CHARS:sub(c4 + 1, c4 + 1)
+        else
+            out[#out + 1] = "="
+        end
+        i = i + 3
     end
-
-    return table.concat(parts, "|")
+    return table.concat(out)
 end
 
--- Parses a HH1|... string. Returns (ok, applied, skipped, err). On success,
--- overrides are written into HH.chardb.bosses (existing entries for unknown
--- IDs are preserved; entries for known IDs are replaced).
-function DB:ImportOverrides(str)
-    if type(str) ~= "string" then return false, 0, 0, "not a string" end
-    str = str:gsub("^%s+", ""):gsub("%s+$", "")
-
-    local version, rest = str:match("^(HH%d+)|(.*)$")
-    if not version then
-        -- Also accept a bare version string with no entries (valid empty import)
-        if str == EXPORT_VERSION then return true, 0, 0, nil end
-        return false, 0, 0, "missing or invalid version prefix (expected HH1|...)"
+local function Base64Decode(str)
+    str = str:gsub("%s+", "")
+    str = str:gsub("=+$", "")
+    local out = {}
+    local len = #str
+    local i   = 1
+    while i <= len do
+        local a = B64_INDEX[str:sub(i,     i)]
+        local b = B64_INDEX[str:sub(i + 1, i + 1)]
+        local c = B64_INDEX[str:sub(i + 2, i + 2)]
+        local d = B64_INDEX[str:sub(i + 3, i + 3)]
+        if not a or not b then return nil, "invalid base64 character" end
+        local n = a * 262144 + b * 4096 + (c or 0) * 64 + (d or 0)
+        out[#out + 1] = string.char(math.floor(n / 65536))
+        if c then out[#out + 1] = string.char(math.floor(n / 256) % 256) end
+        if d then out[#out + 1] = string.char(n % 256) end
+        i = i + 4
     end
-    if version ~= EXPORT_VERSION then
-        return false, 0, 0, "unsupported format version: " .. version
-    end
+    return table.concat(out)
+end
 
+-- -- Spec encoding -----------------------------------------------------------
+
+local function EncodeSpec(cfg, enabled)
+    if enabled == false then return "off" end
+    if cfg.type == "pull"  then return "pull" end
+    if cfg.type == "hp"    and cfg.hp    then return "hp:"    .. tostring(cfg.hp)    end
+    if cfg.type == "phase" and cfg.phase then return "phase:" .. tostring(cfg.phase) end
+    return nil
+end
+
+-- Parses the payload after the `HHn|` header and writes entries into
+-- HH.chardb.bosses. Returns (applied, skipped). Used by both HH1 and HH2.
+local function ParseEntries(rest)
     HH.chardb.bosses = HH.chardb.bosses or {}
-
     local applied, skipped = 0, 0
     for entry in (rest .. "|"):gmatch("([^|]+)|") do
         local id, spec = entry:match("^([^=]+)=(.*)$")
@@ -343,7 +381,7 @@ function DB:ImportOverrides(str)
                     o.type = "hp"
                     o.hp   = math.max(1, math.min(99, tonumber(val) or 35))
                 elseif kind == "phase" then
-                    o.type = "phase"
+                    o.type  = "phase"
                     o.phase = math.max(1, math.min(10, tonumber(val) or 2))
                 else
                     o = nil
@@ -359,6 +397,85 @@ function DB:ImportOverrides(str)
             skipped = skipped + 1
         end
     end
+    return applied, skipped
+end
 
+-- -- Public API --------------------------------------------------------------
+
+-- Builds a full snapshot of the player's effective per-boss configuration
+-- and returns it wrapped as an opaque hash string.
+function DB:ExportHash()
+    local ids = {}
+    for id in pairs(DB.BOSSES) do table.insert(ids, id) end
+    table.sort(ids)
+
+    local parts = { EXPORT_VERSION }
+    for _, id in ipairs(ids) do
+        local boss     = DB.BOSSES[id]
+        local override = HH.chardb and HH.chardb.bosses and HH.chardb.bosses[id]
+
+        -- Merge override on top of the database default, exactly the same
+        -- way GetTriggerConfig does it.
+        local cfg = {}
+        for k, v in pairs(boss.default) do cfg[k] = v end
+        if override then
+            if override.type  then cfg.type  = override.type  end
+            if override.hp    then cfg.hp    = override.hp    end
+            if override.phase then cfg.phase = override.phase end
+        end
+        local enabled = not (override and override.enabled == false)
+
+        local spec = EncodeSpec(cfg, enabled)
+        if spec then
+            parts[#parts + 1] = id .. "=" .. spec
+        end
+    end
+
+    local plain = table.concat(parts, "|")
+    return HASH_PREFIX .. Base64Encode(plain)
+end
+
+-- Parses an export hash. Returns (ok, applied, skipped, err). On success,
+-- entries are written into HH.chardb.bosses — existing entries for boss IDs
+-- not present in the hash are left untouched; entries for IDs in the hash
+-- are replaced.
+--
+-- Accepts:
+--   * HH!<base64> (new format)
+--   * HH2|... plaintext (same payload, unwrapped)
+--   * HH1|... plaintext (legacy overrides-only format)
+function DB:ImportHash(str)
+    if type(str) ~= "string" then return false, 0, 0, "not a string" end
+    str = str:gsub("^%s+", ""):gsub("%s+$", "")
+    if str == "" then return false, 0, 0, "empty input" end
+
+    -- Unwrap the HH!<base64> envelope if present.
+    local plain = str
+    if str:sub(1, #HASH_PREFIX) == HASH_PREFIX then
+        local decoded, err = Base64Decode(str:sub(#HASH_PREFIX + 1))
+        if not decoded then
+            return false, 0, 0, "invalid hash: " .. tostring(err)
+        end
+        plain = decoded
+    end
+
+    local version, rest = plain:match("^(HH%d+)|(.*)$")
+    if not version then
+        -- Allow a bare version marker (empty but valid).
+        if plain == "HH1" or plain == "HH2" then
+            return true, 0, 0, nil
+        end
+        return false, 0, 0, "missing or invalid version (expected HH!<hash>)"
+    end
+    if version ~= "HH1" and version ~= "HH2" then
+        return false, 0, 0, "unsupported format version: " .. version
+    end
+
+    local applied, skipped = ParseEntries(rest)
     return true, applied, skipped, nil
 end
+
+-- Legacy aliases — kept so any external caller still using the pre-hash
+-- names continues to work.
+DB.ExportOverrides = DB.ExportHash
+DB.ImportOverrides = DB.ImportHash
