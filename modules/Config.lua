@@ -652,14 +652,33 @@ function Config:BuildBossesTab(panel)
     end, HH.Database.RAIDS[1].name, "raid")
     raidDD:SetPoint("LEFT", raidLabel, "RIGHT", 4, -2)
 
-    -- Import / Export buttons (top-right of the bosses tab)
+    -- Import / Export buttons (top-right of the bosses tab).
+    --
+    -- We wrap the click handlers in pcall so any error in ShowExport/Import
+    -- Popup surfaces in chat instead of vanishing silently — a plain
+    -- :SetScript("OnClick", ...) callback that raises will just produce a
+    -- yellow error frame the player may have disabled. The pcall guarantees
+    -- the addon at least tells you *something* happened.
+    local function SafeClick(label, fn)
+        local ok, err = pcall(fn)
+        if not ok then
+            HH:Print(label .. " failed: " .. tostring(err), HH.Colors.error)
+        end
+    end
+
     local exportBtn = MakeFlatButton(panel, "Export", 70, 22)
     exportBtn:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -80, 0)
-    exportBtn:SetScript("OnClick", function() Config:ShowExportPopup() end)
+    exportBtn:RegisterForClicks("LeftButtonUp")
+    exportBtn:SetScript("OnClick", function()
+        SafeClick("Export", function() Config:ShowExportPopup() end)
+    end)
 
     local importBtn = MakeFlatButton(panel, "Import", 70, 22)
     importBtn:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -4, 0)
-    importBtn:SetScript("OnClick", function() Config:ShowImportPopup() end)
+    importBtn:RegisterForClicks("LeftButtonUp")
+    importBtn:SetScript("OnClick", function()
+        SafeClick("Import", function() Config:ShowImportPopup() end)
+    end)
 
     -- Scrollable list for boss rows
     local scrollFrame = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate")
@@ -828,7 +847,10 @@ local function CreatePopup()
     if popup then return popup end
 
     local f = CreateFrame("Frame", "HeroHelperIOPopup", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
-    f:SetSize(460, 200)
+    -- Sized to comfortably fit the full DB hash (~900 base64 chars, which
+    -- wraps to ~7 lines at this width) plus headroom for the title,
+    -- help line and action row.
+    f:SetSize(520, 360)
     f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     f:SetFrameStrata("FULLSCREEN_DIALOG")
     f:SetMovable(true)
@@ -865,22 +887,27 @@ local function CreatePopup()
     -- Multi-line-ish edit box (TBC Classic has a working ScrollingEditBox,
     -- but for our short single-line share strings a plain EditBox is enough;
     -- we just widen it and disable autofocus).
-    local editBg = f:CreateTexture(nil, "BACKGROUND")
-    editBg:SetPoint("TOPLEFT",     f, "TOPLEFT",  PADDING,     -PADDING - 44)
-    editBg:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -PADDING,  PADDING + 28)
+    --
+    -- The background lives on a real Frame rather than a bare Texture so
+    -- AddThinBorder can hang its four edge textures on it — textures have
+    -- no CreateTexture method, which was the original silent crash.
+    local editBox = CreateFrame("Frame", nil, f)
+    editBox:SetPoint("TOPLEFT",     f, "TOPLEFT",     PADDING, -PADDING - 44)
+    editBox:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -PADDING,  PADDING + 28)
+    local editBg = editBox:CreateTexture(nil, "BACKGROUND")
+    editBg:SetAllPoints(editBox)
     editBg:SetColorTexture(0.07, 0.07, 0.09, 1)
+    AddThinBorder(editBox, D.border[1], D.border[2], D.border[3], D.borA)
 
-    local edit = CreateFrame("EditBox", nil, f)
-    edit:SetPoint("TOPLEFT",     editBg, "TOPLEFT",     4,  -4)
-    edit:SetPoint("BOTTOMRIGHT", editBg, "BOTTOMRIGHT", -4,  4)
+    local edit = CreateFrame("EditBox", nil, editBox)
+    edit:SetPoint("TOPLEFT",     editBox, "TOPLEFT",     4,  -4)
+    edit:SetPoint("BOTTOMRIGHT", editBox, "BOTTOMRIGHT", -4,  4)
     edit:SetFontObject("GameFontHighlightSmall")
     edit:SetAutoFocus(false)
     edit:SetMultiLine(true)
     edit:SetMaxLetters(4096)
     edit:SetScript("OnEscapePressed", function(self) self:ClearFocus(); f:Hide() end)
     f.edit = edit
-
-    AddThinBorder(editBg, D.border[1], D.border[2], D.border[3], D.borA)
 
     -- Action button (changes label + behavior depending on mode)
     local actionBtn = MakeFlatButton(f, "OK", 110, 22)
@@ -900,10 +927,10 @@ end
 
 function Config:ShowExportPopup()
     local f = CreatePopup()
-    f.title:SetText("|cFFFF7D1AHeroHelper|r  |cFF66666BExport|r")
-    f.help:SetText("Copy this string (Ctrl+A, Ctrl+C) and share it with your raid.")
+    f.title:SetText("|cFFFF7D1AHeroHelper|r  |cFF66666BExport Hash|r")
+    f.help:SetText("Copy this hash (Ctrl+A, Ctrl+C) and share it with your raid.")
 
-    local str = HH.Database:ExportOverrides()
+    local str = HH.Database:ExportHash()
     f.edit:SetText(str)
     f.edit:HighlightText()
     f.edit:SetFocus()
@@ -920,15 +947,15 @@ end
 
 function Config:ShowImportPopup()
     local f = CreatePopup()
-    f.title:SetText("|cFFFF7D1AHeroHelper|r  |cFF66666BImport|r")
-    f.help:SetText("Paste an export string below, then click Apply. Existing per-boss settings will be overwritten.")
+    f.title:SetText("|cFFFF7D1AHeroHelper|r  |cFF66666BImport Hash|r")
+    f.help:SetText("Paste an import hash below, then click Apply. Existing per-boss settings will be overwritten.")
     f.edit:SetText("")
     f.edit:SetFocus()
 
     f.actionBtn.label:SetText("Apply")
     f.actionBtn:SetScript("OnClick", function()
         local str = f.edit:GetText()
-        local ok, applied, skipped, err = HH.Database:ImportOverrides(str)
+        local ok, applied, skipped, err = HH.Database:ImportHash(str)
         if not ok then
             HH:Print("Import failed: " .. tostring(err), HH.Colors.error)
             return
