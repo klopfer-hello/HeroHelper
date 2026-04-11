@@ -286,12 +286,15 @@ function RB:CreateButton()
     button:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     -- Pulse animation — alpha-only modulation so the glow stays perfectly
-    -- centered on the button regardless of size.
+    -- centered on the button regardless of size. Tuned for high visibility:
+    -- the alpha never drops below 0.55 so the glow is always present, and
+    -- peaks at 1.0 for an aggressive flash. Cycle speed 6 rad/s = ~1.05s
+    -- per pulse, fast enough to grab the eye without flickering.
     local elapsed = 0
     button:SetScript("OnUpdate", function(self, e)
         if not self.pulse then return end
         elapsed = elapsed + e
-        local a = 0.35 + 0.35 * (1 + math.sin(elapsed * 5)) * 0.5
+        local a = 0.55 + 0.45 * (1 + math.sin(elapsed * 6)) * 0.5
         self.pulse:SetAlpha(a)
     end)
 end
@@ -325,11 +328,12 @@ function RB:ApplySize()
     end
 
     -- Anchor the pulse to the button's four corners with a symmetric
-    -- outward offset (30% of the button size on each side). This keeps the
-    -- glow centered and proportional at every size, with no dependency on
-    -- the texture's own aspect ratio.
+    -- outward offset (50% of the button size on each side, up from the
+    -- previous 30%). The wider halo makes the reminder unmissable in a
+    -- busy raid frame layout. Symmetric offsets keep the glow centered
+    -- at every size with no dependency on the texture's aspect ratio.
     if button.pulse then
-        local overshoot = math.floor(size * 0.30 + 0.5)
+        local overshoot = math.floor(size * 0.50 + 0.5)
         button.pulse:ClearAllPoints()
         button.pulse:SetPoint("TOPLEFT",     button, "TOPLEFT",     -overshoot,  overshoot)
         button.pulse:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT",  overshoot, -overshoot)
