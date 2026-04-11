@@ -34,14 +34,37 @@ local currentPhase = 1
 local HP_POLL_INTERVAL = 0.25
 local hpPollTicker
 
--- One-shot timer used by the "time" trigger type. Stored so it can be
--- canceled on COMBAT_END or when a new pull replaces the current one.
-local timeTriggerTimer = nil
+-- List of in-flight one-shot timers for "time" trigger conditions. Compound
+-- triggers (type = "any") can arm multiple time conditions in parallel, so
+-- we track them as a list rather than a single handle. Each timer's closure
+-- removes itself from this list when it fires.
+local activeTimeTimers = {}
 
-local function CancelTimeTrigger()
-    if timeTriggerTimer then
-        timeTriggerTimer:Cancel()
-        timeTriggerTimer = nil
+local function CancelAllTimeTriggers()
+    for _, t in ipairs(activeTimeTimers) do
+        t:Cancel()
+    end
+    activeTimeTimers = {}
+end
+
+-- Iterates the trigger conditions on a config. Compound triggers expose a
+-- `conditions` list under cfg.conditions; single-type triggers are wrapped
+-- as a one-element pseudo-list. The trigger pipeline always iterates via
+-- this helper so single-type and compound paths share the same code.
+local function IterConditions(cfg)
+    if not cfg then return function() return nil end end
+    if cfg.type == "any" and cfg.conditions then
+        local i = 0
+        return function()
+            i = i + 1
+            return cfg.conditions[i]
+        end
+    end
+    local done = false
+    return function()
+        if done then return nil end
+        done = true
+        return cfg
     end
 end
 
@@ -76,6 +99,43 @@ end
 -- Per-trigger-type evaluation
 -- ============================================================================
 
+-- Arms a single trigger condition. May fire immediately (pull), schedule
+-- a deferred fire (hp poll / time timer), or do nothing (phase — handled
+-- separately by OnBossYell, which iterates conditions itself).
+--
+-- TryFire latches HH.State.triggered the first time anything actually
+-- fires, so arming multiple conditions in parallel is safe — only the
+-- earliest one to satisfy will produce a real reminder; the rest become
+-- silent no-ops via the latch.
+local function ArmCondition(cond)
+    if not cond or not cond.type then return end
+
+    if cond.type == "pull" then
+        TryFire("pull")
+    elseif cond.type == "hp" then
+        T:StartHPPoll(cond.hp)
+    elseif cond.type == "time" then
+        local seconds    = cond.seconds or 30
+        local pullBossID = HH.State.currentBossID
+        local timer
+        timer = C_Timer.NewTimer(seconds, function()
+            -- Self-remove from the active list before firing.
+            for i, t in ipairs(activeTimeTimers) do
+                if t == timer then
+                    table.remove(activeTimeTimers, i)
+                    break
+                end
+            end
+            if HH.State.currentBossID == pullBossID and HH.State.inCombat then
+                TryFire("time +" .. seconds .. "s")
+            end
+        end)
+        table.insert(activeTimeTimers, timer)
+    end
+    -- "phase" conditions are armed implicitly: OnBossYell scans the active
+    -- config's conditions list whenever a yell advances the phase counter.
+end
+
 -- Trigger evaluation that runs on EITHER BOSS_PULL or COMBAT_START.
 --
 -- Why both: the unit-scan fallback in Detection runs on TARGET_CHANGED /
@@ -95,29 +155,10 @@ local function EvaluatePullTrigger()
     local cfg = HH.Database:GetTriggerConfig(HH.State.currentBossID)
     if not cfg then return end
 
-    if cfg.type == "pull" then
-        TryFire("pull")
-    end
-
-    -- Kick off the HP poll ticker only when there is an HP-type trigger.
-    -- This keeps non-HP fights completely idle.
-    if cfg.type == "hp" then
-        T:StartHPPoll()
-    end
-
-    -- "time": fire after a fixed delay from the first pull evaluation.
-    -- The timer is one-shot and bound to the current bossID, so a new
-    -- pull or COMBAT_END replaces / cancels it instead of double-firing.
-    if cfg.type == "time" then
-        CancelTimeTrigger()
-        local seconds    = cfg.seconds or 30
-        local pullBossID = HH.State.currentBossID
-        timeTriggerTimer = C_Timer.NewTimer(seconds, function()
-            timeTriggerTimer = nil
-            if HH.State.currentBossID == pullBossID and HH.State.inCombat then
-                TryFire("time +" .. seconds .. "s")
-            end
-        end)
+    -- Compound triggers fan out into all subconditions in parallel; single
+    -- triggers go through the same loop as a one-element list.
+    for cond in IterConditions(cfg) do
+        ArmCondition(cond)
     end
 end
 
@@ -125,25 +166,23 @@ end
 local function OnBossPull(bossID)
     currentPhase = 1
     HH.State.triggered = false
-    CancelTimeTrigger() -- new pull cancels any in-flight time trigger
+    CancelAllTimeTriggers() -- new pull invalidates any in-flight time timers
     EvaluatePullTrigger()
 end
 
 -- "hp": poll the boss unit and fire when HP% drops below the threshold.
-function T:StartHPPoll()
+-- The threshold is captured at arming time so compound triggers can pass
+-- a sub-condition's own hp value (the parent cfg.type may be "any").
+function T:StartHPPoll(threshold)
     if hpPollTicker then return end
+    threshold = threshold or 35
     hpPollTicker = C_Timer.NewTicker(HP_POLL_INTERVAL, function()
         if not HH.State.currentBossID or HH.State.triggered or not HH.State.inCombat then
             T:StopHPPoll()
             return
         end
-        local cfg = HH.Database:GetTriggerConfig(HH.State.currentBossID)
-        if not cfg or cfg.type ~= "hp" then
-            T:StopHPPoll()
-            return
-        end
         local hp = HH.Detection:GetCurrentBossHPPct()
-        if hp and hp <= (cfg.hp or 35) then
+        if hp and hp <= threshold then
             TryFire("hp " .. math.floor(hp) .. "%")
             T:StopHPPoll()
         end
@@ -179,9 +218,17 @@ local function OnBossYell(text)
                 currentPhase = phase
                 HH:Debug("Phase advanced to " .. phase .. " via yell: " .. pattern)
 
+                -- Iterate the active conditions and fire if any phase
+                -- condition's target has been reached. Compound triggers
+                -- can have a phase condition alongside hp / pull / time —
+                -- whichever fires first wins via the triggered latch.
                 local cfg = HH.Database:GetTriggerConfig(HH.State.currentBossID)
-                if cfg and cfg.type == "phase" and currentPhase >= (cfg.phase or 2) then
-                    TryFire("phase " .. currentPhase)
+                for cond in IterConditions(cfg) do
+                    if cond.type == "phase"
+                       and currentPhase >= (cond.phase or 2) then
+                        TryFire("phase " .. currentPhase)
+                        return
+                    end
                 end
                 return
             end
@@ -397,6 +444,6 @@ function T:Initialize()
         currentPhase = 1
         HH.State.triggered = false
         T:StopHPPoll()
-        CancelTimeTrigger()
+        CancelAllTimeTriggers()
     end)
 end

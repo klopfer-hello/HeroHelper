@@ -72,6 +72,23 @@ DB.RAIDS = {
 --   * long progression bosses                          -> "hp" at a value where
 --                                                         burn phase starts
 --   * phased fights with a clear burn phase entry      -> "phase" with yell
+--   * fights with a known sweet spot N seconds in      -> "time", seconds = N
+--
+-- Compound (any-of) triggers are also supported via:
+--
+--     default = {
+--         type = "any",
+--         conditions = {
+--             { type = "phase", phase = 3 },
+--             { type = "hp",    hp    = 25 },
+--             { type = "time",  seconds = 90 },
+--         },
+--     },
+--
+-- The first condition that fires wins (HH.State.triggered latches the
+-- whole reminder so the others silently no-op). Useful as a fallback when
+-- yell-based phase detection is unreliable: pair "phase" with an "hp" or
+-- "time" safety net so you never miss the window.
 
 DB.BOSSES = {
     -- ==================== KARAZHAN ====================
