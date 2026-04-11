@@ -16,7 +16,8 @@ The architecture is deliberately aligned with the [FishingKit](https://github.co
 | [Bindings.xml](Bindings.xml) | Key binding declarations |
 | [modules/Database.lua](modules/Database.lua) | Static raid-boss database with per-boss default triggers (pull / hp / phase) and phase-up yell patterns |
 | [modules/Detection.lua](modules/Detection.lua) | Boss identification via BigWigs callback, DBM callback, or unit-scan fallback |
-| [modules/Triggers.lua](modules/Triggers.lua) | Trigger evaluation engine. Listens for BOSS_PULL, BOSS_YELL, COMBAT_END. Fires `HEROHELPER_TRIGGER` when conditions are met |
+| [modules/Triggers.lua](modules/Triggers.lua) | Trigger evaluation engine. Listens for BOSS_PULL, BOSS_YELL, COMBAT_END, COMBAT_START. Fires `HEROHELPER_TRIGGER` when conditions are met. Also owns the `/hh mobtest` diagnostic mode and the per-pull / time / hp / phase / compound (`any`) condition arming |
+| [modules/Comms.lua](modules/Comms.lua) | Multi-shaman coordination over the addon-message channel. Roster-based election (HELLO protocol), locked snapshot at expected group size, alive-aware fallback to backup shamans, optional raid-chat order announcement |
 | [modules/ReminderButton.lua](modules/ReminderButton.lua) | The moveable `SecureActionButtonTemplate` that casts BL/Hero on click |
 | [modules/Minimap.lua](modules/Minimap.lua) | Self-contained minimap button (same pattern as FishingKit, no LibDBIcon) |
 | [modules/Config.lua](modules/Config.lua) | Two-tab (General / Bosses) config panel |
@@ -40,6 +41,8 @@ Internal events:
 | `CLEU` | Core (`COMBAT_LOG_EVENT_UNFILTERED`) | `CombatLogGetCurrentEventInfo()` values |
 | `COOLDOWN_CHANGED` | Core (`SPELL_UPDATE_COOLDOWN`) | - |
 | `PLAYER_AURA_CHANGED` | Core (`UNIT_AURA` for player) | - |
+| `CHAT_MSG_ADDON` | Core (`CHAT_MSG_ADDON`) | `prefix, message, channel, sender, ...` |
+| `GROUP_ROSTER_UPDATE` | Core (`GROUP_ROSTER_UPDATE`) | - |
 | `BOSS_PULL` | Detection | `bossID, unit` |
 | `HEROHELPER_TRIGGER` | Triggers | `bossID, reason` |
 
@@ -109,7 +112,7 @@ Follows **Semantic Versioning** (`MAJOR.MINOR.PATCH`):
 | New backwards-compatible features | MINOR | 1.0.x → 1.1.0 |
 | Bug fixes only | PATCH | 1.1.x → 1.1.1 |
 
-Current version: `1.0.0` (first stable release). Semver applies going forward.
+Current version: `1.1.0` (multi-shaman coordination, dungeon support, compound triggers, time triggers, zone-aware lookup). Semver applies going forward.
 
 ### Release Process
 

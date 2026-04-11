@@ -1,6 +1,10 @@
+<img src="media/icon.png" alt="HeroHelper" width="96" align="left"/>
+
 ## HeroHelper
 
 A simple TBC Classic Anniversary addon that tells Shamans **when** to cast Heroism / Bloodlust on every raid and dungeon boss.
+
+<br clear="left"/>
 
 No more checking the spreadsheet between pulls. No more "wait, was I supposed to lust this one?". A glowing button pops up at the right moment — you click it, you cast, you keep DPS'ing.
 
@@ -79,8 +83,14 @@ The other shamans see *"Heroism deferred to <name>"* in chat when their reminder
 ### Compatibility
 
 - **Game version**: TBC Classic Anniversary (2.5.5)
-- **Addon version**: 1.0.0
+- **Addon version**: 1.1.0
 - Works on its own. Plays nicely with **BigWigs** and **DBM** if you have them.
+
+---
+
+### Acknowledgments
+
+Architecture and visual style are aligned with [FishingKit](https://github.com/klopfer-hello/fishingkit-reworked) — same module layout, same flat dark config theme, same self-contained minimap button pattern.
 
 ---
 

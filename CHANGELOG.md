@@ -1,5 +1,143 @@
 # HeroHelper - TBC Anniversary Edition - Changelog
 
+## v1.1.0
+
+Major feature release: full TBC dungeon coverage, multi-shaman
+coordination with role-based election, three new trigger types,
+zone-aware boss lookup, and a project icon + screenshots in `media/`.
+
+### New trigger types
+
+- **Time after pull** (`type = "time", seconds = N`). Fires the reminder
+  N seconds after combat starts. Useful for fights with a known sweet
+  spot a fixed delay into the engagement (1–600 seconds, configurable
+  per boss in the Bosses tab).
+- **Compound (any-of)** (`type = "any", conditions = {...}`). Fires on
+  the FIRST of multiple conditions. Pair a `phase` with an `hp` and a
+  `time` safety net so you never miss a burn window when yell-based
+  phase detection is unreliable. Configure via the new "Multi" option
+  in the per-boss type dropdown — opens a small popup with checkbox +
+  value editors for each sub-condition. Compound configs serialize
+  through the export/import hash as `any(pull;hp:25;time:60)`.
+
+### 5-man dungeon support
+
+- 50 TBC dungeon bosses across 15 dungeons added to the database. All
+  flagged `isDungeon = true` and gated behind a new General-tab toggle
+  (**"Alert for dungeon bosses (5-man, on pull)"**, off by default so
+  raid-only installs don't suddenly start beeping on Hellfire trash).
+- Researched non-pull defaults: Grand Warlock Nethekurse `hp 20`,
+  Talon King Ikiss `hp 25`, Murmur `hp 40`, Pathaleon `hp 20`, and
+  Harbinger Skyriss `phase 2` with verified yells. The other 45
+  dungeon bosses default to `pull` — correct for short heroic 5-mans.
+
+### Zone-aware boss lookup
+
+- Magisters' Terrace's Kael'thas Sunstrider was previously omitted
+  because his name collided with Tempest Keep's Kael'thas. The
+  database name index now supports multi-match entries with explicit
+  `zone` tags, and `DB:LookupByName` takes an optional zone string
+  that disambiguates via `GetRealZoneText()`. Both Kael'thas entries
+  now exist in the database and detect correctly inside their
+  respective instances.
+
+### Multi-shaman coordination
+
+- New `modules/Comms.lua` adds an addon-message protocol so multiple
+  HeroHelper-using shamans in the same group don't double-Heroism.
+  Roster-based election: each user broadcasts a `HELLO:<priority>`
+  on join, the lowest-priority alive shaman is elected, and ONLY
+  that one client's HeroHelper produces reminders. Everyone else is
+  completely silent (no popup, no sound).
+- Players pick a **role** in the General tab: *Primary*, *Secondary*,
+  *Backup*, or *Auto*. Lower priority wins. Auto falls back to
+  alphabetical name precedence.
+- The election **locks** when the group reaches its instance's
+  expected size (5 for 5-mans, 10 for Karazhan / Zul'Aman, 25 for
+  the larger raids — sourced from `GetInstanceInfo`). The locked
+  roster is a snapshot — late joiners after lock are not added, the
+  order is fixed for the duration of the run.
+- If the elected winner dies during a fight, the next-priority alive
+  shaman in the locked roster silently takes over (no chat noise).
+- Optional **raid-chat announcement** (off by default): on lock, the
+  elected winner posts a one-line "HeroHelper: <name> will Heroism.
+  Order: a > b > c" to RAID/PARTY chat. Posted exactly once per group
+  formation, naturally deduplicated because every client computes
+  the same winner.
+- New diagnostic command **`/hh roster`** dumps the current (live or
+  locked) roster, each member's role, and the active winner.
+
+### New diagnostic command
+
+- **`/hh mobtest pull`** arms a one-shot listener that fires the
+  reminder on the next combat start, against any target. Lets you
+  verify the pull-trigger pipeline against a target dummy without
+  needing an actual boss. The HP-mode `/hh mobtest [%]` from v1.0.0
+  remains.
+
+### UI improvements
+
+- Bosses tab gains a **Reset** button alongside Export / Import that
+  wipes every per-boss override and returns every boss to the
+  database default. StaticPopup confirmation prevents accidents.
+- Per-boss row's value editor now shows a unit suffix (`%`, `s`)
+  matching the current trigger type so the meaning of the number
+  is unambiguous.
+- The "Phase" trigger option is hidden from the per-boss dropdown
+  for bosses without yell patterns in the database, instead of
+  letting the player pick a trigger that would silently never fire.
+- Brighter, wider, faster reminder-button glow tuning so the popup
+  is harder to miss in a busy raid UI.
+
+### Bug fixes
+
+- **Reminder button actually appears in combat now.** A TBC layout
+  bug propagated stale heights through `SetAllPoints` on a protected
+  child whose container moved mid-combat (we observed h=132313 on a
+  52-tall button). Fixed by parking the container at the player's
+  saved position permanently and toggling visibility purely via
+  `SetAlpha`. The container never moves at runtime.
+- **Pull triggers re-evaluate on `COMBAT_START`.** Previously, if the
+  player tab-targeted a boss before the tank pulled, `BOSS_PULL`
+  fired pre-combat, `IsReady` bailed on the inCombat gate, and the
+  trigger silently missed (the boss was already locked in by
+  Detection so it never re-fired). Triggers now also runs the
+  evaluator on `COMBAT_START`, with the same triggered-latch making
+  it idempotent.
+- **Bosses tab populates on first open** instead of requiring a
+  raid-dropdown click to refresh. Init ordering bug in `Config:CreateFrame`.
+- **Compound popup checkboxes now toggle on click.** `MakeCheckbox`
+  only installs its OnClick handler when you call `:HookClick(fn)`,
+  which the popup wasn't doing.
+- **Compound popup value editors no longer overflow the popup frame.**
+  Previously anchored to the right edge of the 260 px-wide checkbox
+  container; now anchored to the popup's right edge directly.
+- **Import / Export popup no longer crashes on first click.** A bare
+  Texture was being passed to `AddThinBorder` which calls
+  `:CreateTexture` on its argument — a method only Frames have.
+- **BigWigs hook now installs cleanly.** `RegisterMessage` is a
+  CallbackHandler-1.0 method that takes a subscriber as the first
+  argument, not `self`; we now use dot syntax with the HeroHelper
+  namespace.
+
+### Documentation & assets
+
+- README rewritten as a player-facing overview with screenshot
+  placeholders, and the `media/` folder is now in the repo:
+  - `media/icon.png` — addon logo
+  - `media/screenshots/screenshot-reminder.png`
+  - `media/screenshots/screenshot-options-general.png`
+  - `media/screenshots/screenshot-options-bosses.png`
+- CLAUDE.md updated with `modules/Comms.lua`, the `CHAT_MSG_ADDON` and
+  `GROUP_ROSTER_UPDATE` events, and the v1.1.0 version pin.
+
+### Removed
+
+- Legacy `/hh debugsound` slash command (leftover instrumentation
+  from the v1.0.0 sound-dropdown work).
+
+---
+
 ## v1.0.0
 
 First stable release. Everything below is net-new since the `v0.1.0`
