@@ -794,10 +794,20 @@ function Config:RefreshBossList()
         end
         table.insert(typeItems, { label = "Off", value = "off" })
 
+        -- Unit suffix label, swapped per trigger type so the player can
+        -- tell at a glance whether the value box means percent, seconds
+        -- or a phase number. Anchored to the row's right edge; the edit
+        -- box anchors to its left so the layout shifts as the unit width
+        -- changes between "%", "s" and the empty phase case.
+        local unitLabel = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        unitLabel:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+        unitLabel:SetTextColor(D.label[1], D.label[2], D.label[3])
+        unitLabel:Hide()
+
         -- HP / Phase / Time edit box (shared slot, switched based on type)
         local edit = CreateFrame("EditBox", nil, row)
         edit:SetSize(50, 20)
-        edit:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+        edit:SetPoint("RIGHT", unitLabel, "LEFT", -3, 0)
         edit:SetAutoFocus(false)
         edit:SetFontObject("GameFontHighlightSmall")
         edit:SetJustifyH("CENTER")
@@ -814,14 +824,20 @@ function Config:RefreshBossList()
             if effective.type == "hp" then
                 edit:Show()
                 edit:SetText(tostring(effective.hp or 35))
+                unitLabel:SetText("%")
+                unitLabel:Show()
             elseif effective.type == "phase" then
                 edit:Show()
                 edit:SetText(tostring(effective.phase or 2))
+                unitLabel:Hide()
             elseif effective.type == "time" then
                 edit:Show()
                 edit:SetText(tostring(effective.seconds or 30))
+                unitLabel:SetText("s")
+                unitLabel:Show()
             else
                 edit:Hide()
+                unitLabel:Hide()
             end
         end
 
