@@ -523,6 +523,16 @@ function Config:BuildGeneralTab(panel)
     roleDD:SetPoint("LEFT", roleLabel, "RIGHT", 4, -2)
     y = y - ROW_HEIGHT - 6
 
+    -- Raid-chat announcement of the resolved Heroism order. Off by
+    -- default to avoid raid-chat noise; opt in for raids that want to
+    -- see who's casting before each pull.
+    local cbAnnounce = MakeCheckbox(panel, "Announce Heroism order in raid chat (once per pull)")
+    cbAnnounce:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, y)
+    cbAnnounce:HookClick(function(checked)
+        HH.db.settings.announceCoordination = checked
+    end)
+    y = y - ROW_HEIGHT
+
     y = y - 8
     SectionHeader("REMINDER BUTTON")
 
@@ -685,6 +695,7 @@ function Config:BuildGeneralTab(panel)
         if roleDD and roleDD.RefreshText then
             roleDD:RefreshText(RoleLabelFor(HH.db.settings.shamanPriority or 99))
         end
+        cbAnnounce:SetChecked(HH.db.settings.announceCoordination == true)
         cbLocked:SetChecked(HH.chardb.settings.button.locked)
         cbSoundEnabled:SetChecked(HH.chardb.settings.soundEnabled)
         cbTest:SetChecked(HH.ReminderButton and HH.ReminderButton:IsTestMode() or false)

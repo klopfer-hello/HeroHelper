@@ -171,6 +171,47 @@ local function PickWinner(bidders)
     return chosen
 end
 
+-- Returns a bidder list sorted by priority (then alphabetical name),
+-- which is the same order PickWinner walks. Used by the raid-chat
+-- announcement to print "winner > backup1 > backup2".
+local function SortBiddersByPriority(bidders)
+    local sorted = {}
+    for _, b in ipairs(bidders) do
+        sorted[#sorted + 1] = { name = b.name, priority = b.priority }
+    end
+    table.sort(sorted, function(a, b)
+        if a.priority ~= b.priority then return a.priority < b.priority end
+        return NameLessThan(a.name, b.name)
+    end)
+    return sorted
+end
+
+-- Posts the resolved Heroism order to raid/party chat. Called by the
+-- chosen winner only — every HeroHelper instance computes the same
+-- winner from the same bidder list, so this naturally deduplicates
+-- across the raid without needing a separate handshake.
+local function BroadcastOrder(bidders, channel)
+    local sorted = SortBiddersByPriority(bidders)
+    if #sorted == 0 then return end
+
+    local spell = (HH.State and HH.State.spellName) or "Heroism"
+    local chosen = sorted[1].name
+
+    local msg
+    if #sorted == 1 then
+        msg = ("HeroHelper: %s will %s."):format(chosen, spell)
+    else
+        local names = {}
+        for _, s in ipairs(sorted) do names[#names + 1] = s.name end
+        msg = ("HeroHelper: %s will %s. Order: %s"):format(
+            chosen, spell, table.concat(names, " > "))
+    end
+
+    if SendChatMessage then
+        pcall(SendChatMessage, msg, channel)
+    end
+end
+
 -- ============================================================================
 -- Public API
 -- ============================================================================
@@ -206,6 +247,7 @@ function C:Coordinate(bossID, reason, fireFn)
         bossID  = bossID,
         reason  = reason,
         fireFn  = fireFn,
+        channel = channel,
         bidders = {
             -- Self is always the first bidder; the resolve callback re-
             -- evaluates alive status at fire time.
@@ -234,6 +276,12 @@ function C:Coordinate(bossID, reason, fireFn)
 
         if winner.name == me then
             HH:Debug(("Coordinate: won bid (priority=%d)"):format(winner.priority))
+            -- Only the chosen winner posts the raid-chat order, so the
+            -- announcement is naturally one-per-pull even with multiple
+            -- HeroHelper users in the group.
+            if HH.db.settings.announceCoordination then
+                BroadcastOrder(p.bidders, p.channel)
+            end
             p.fireFn()
         else
             HH:Print(("Heroism deferred to %s."):format(winner.name),

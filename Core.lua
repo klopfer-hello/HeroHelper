@@ -123,6 +123,14 @@ local defaultDB = {
         --   3  = Backup     (casts if primary and secondary are dead)
         --   99 = Auto       (no explicit role; alphabetical fallback)
         shamanPriority = 99,
+        -- Post a one-line raid-chat announcement when coordination
+        -- resolves: "HeroHelper: <chosen> will Heroism. Order: a > b > c".
+        -- Only the chosen winner actually sends the message — every
+        -- HeroHelper instance computes the same winner deterministically
+        -- from the same bidder list, so the message naturally
+        -- deduplicates across the raid. Default off because it adds
+        -- chat noise; opt in via /hh General when the raid wants it.
+        announceCoordination = false,
     },
 }
 
