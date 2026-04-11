@@ -1,0 +1,16 @@
+<Bindings>
+    <Binding name="HEROHELPER_CONFIG" header="HEROHELPER">
+        HeroHelper.Config:Toggle()
+    </Binding>
+    <Binding name="HEROHELPER_LOCK">
+        HeroHelper.chardb.settings.button.locked = not HeroHelper.chardb.settings.button.locked
+        if HeroHelper.ReminderButton and HeroHelper.ReminderButton.ApplyLock then
+            HeroHelper.ReminderButton:ApplyLock()
+        end
+    </Binding>
+    <Binding name="HEROHELPER_TEST">
+        if HeroHelper.ReminderButton and HeroHelper.ReminderButton.TestShow then
+            HeroHelper.ReminderButton:TestShow()
+        end
+    </Binding>
+</Bindings>

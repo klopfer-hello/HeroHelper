@@ -1,0 +1,42 @@
+## Interface: 20505
+## Title: |cFFFF7D1AHeroHelper|r - TBC Anniversary Edition
+## Notes: Reminds you to cast Heroism / Bloodlust at the right moment on every TBC raid boss.
+## Author: Klopfer-Hello
+## Version: 0.1.0
+## SavedVariables: HeroHelperDB
+## SavedVariablesPerCharacter: HeroHelperCharDB
+## IconTexture: Interface\Icons\Spell_Nature_Bloodlust
+
+# https://warcraft.wiki.gg/wiki/Addon_Categories
+## Category: Raid
+## Category-deDE: Schlachtzug
+## Category-esES: Banda
+## Category-esMX: Banda
+## Category-frFR: Raid
+## Category-itIT: Incursione
+## Category-koKR: 공격대
+## Category-ptBR: Raide
+## Category-ruRU: Рейд
+## Category-zhCN: 团队
+## Category-zhTW: 團隊
+
+# Embedded libraries
+Libs\LibStub\LibStub.lua
+Libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
+Libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua
+
+# Core
+Core.lua
+Bindings.xml
+
+# Data
+modules\Database.lua
+
+# Logic
+modules\Detection.lua
+modules\Triggers.lua
+
+# Interface
+modules\ReminderButton.lua
+modules\Minimap.lua
+modules\Config.lua
