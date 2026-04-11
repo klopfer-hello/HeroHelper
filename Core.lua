@@ -435,9 +435,13 @@ SlashCmdList["HEROHELPER"] = function(msg)
     end
 
     if msg == "test" then
-        if HH.ReminderButton and HH.ReminderButton.TestShow then
-            HH.ReminderButton:TestShow()
-            HH:Print("Test reminder shown.", HH.Colors.info)
+        if HH.ReminderButton and HH.ReminderButton.ToggleTestMode then
+            HH.ReminderButton:ToggleTestMode()
+            if HH.ReminderButton:IsTestMode() then
+                HH:Print("Test mode ON — drag the button into place, then run /hh test again to disable.", HH.Colors.info)
+            else
+                HH:Print("Test mode OFF.", HH.Colors.info)
+            end
         end
         return
     end
@@ -464,6 +468,6 @@ SlashCmdList["HEROHELPER"] = function(msg)
     HH:Print("  /hh             - open options")
     HH:Print("  /hh lock | unlock - lock/unlock reminder button")
     HH:Print("  /hh reset       - reset button position")
-    HH:Print("  /hh test        - show a test reminder")
+    HH:Print("  /hh test        - toggle test mode (button stays visible for positioning)")
     HH:Print("  /hh debug       - toggle debug output")
 end

@@ -223,6 +223,13 @@ end
 
 function RB:ApplyLock()
     if not button then return end
+    -- In test mode the button is always draggable regardless of the saved
+    -- lock state, so ApplyLock only touches the secure macrotext. The
+    -- effective move/drag state is restored when test mode is disabled.
+    if testMode then
+        self:ApplyMacrotext()
+        return
+    end
     local locked = HH.chardb.settings.button.locked
     button:SetMovable(not locked)
     if locked then
@@ -276,10 +283,10 @@ end
 
 function RB:Show()
     if not button then return end
-    -- If a real trigger fires while a test is still up (e.g. the player
-    -- pulls mid-test), exit test mode first so the button is armed for the
-    -- real fight.
-    if testMode then self:_ExitTestMode() end
+    -- If a real trigger fires while the user is still in test mode (e.g.
+    -- they forgot to disable it and pulled), exit test mode first so the
+    -- button is armed for the real fight.
+    if testMode then self:SetTestMode(false) end
     button.label:SetText(HH.State.currentBossName or "HeroHelper")
     button:Show()
     self:PlaySound()
@@ -287,44 +294,63 @@ end
 
 function RB:Hide()
     if not button then return end
+    -- Test mode is sticky — don't let combat end / debuff / cast auto-hide
+    -- kick us out of it. Only explicit SetTestMode(false) can exit test.
+    if testMode then return end
     button:Hide()
-    if testMode then self:_ExitTestMode() end
 end
 
--- TestShow forces the button to be moveable and disarmed so the user can
--- drag a preview reminder into place without accidentally firing BL/Hero.
--- The real lock / macro state is restored automatically when the preview
--- ends (via :_ExitTestMode(), called from Hide or a new Show).
-function RB:TestShow()
+-- ============================================================================
+-- Test mode (toggleable)
+-- ============================================================================
+--
+-- Test mode is a *persistent* toggle, not a timed preview. When enabled:
+--   * the reminder button is forced visible
+--   * it is force-unlocked so the user can drag it into position
+--   * its secure macrotext is cleared to "" so clicks / drags never cast
+--
+-- The user turns it off again via the same toggle in the config panel,
+-- the /hh test slash command, or by pressing the bind key. Disabling test
+-- mode restores the saved lock state and the real cast macro, and hides
+-- the button.
+
+function RB:IsTestMode()
+    return testMode
+end
+
+function RB:SetTestMode(enable)
     if not button then return end
     if InCombatLockdown() then
-        HH:Print("Cannot test while in combat.", HH.Colors.warning)
+        HH:Print("Cannot change test mode while in combat.", HH.Colors.warning)
         return
     end
 
-    testMode = true
-
-    -- Force-enable drag regardless of the saved lock state
-    button:SetMovable(true)
-    button:RegisterForDrag("LeftButton")
-
-    -- ApplyMacrotext sees testMode == true and clears macrotext1 to ""
-    self:ApplyMacrotext()
-
-    button.label:SetText("TEST")
-    button:Show()
-    self:PlaySound()
-
-    C_Timer.After(4, function()
-        if not HH.State.inCombat then self:Hide() end
-    end)
+    if enable then
+        testMode = true
+        -- Force drag enabled regardless of saved lock
+        button:SetMovable(true)
+        button:RegisterForDrag("LeftButton")
+        -- ApplyMacrotext sees testMode == true and clears macrotext1 to ""
+        self:ApplyMacrotext()
+        button.label:SetText("TEST")
+        button:Show()
+        self:PlaySound()
+    else
+        testMode = false
+        -- Restore the saved lock + the real cast macro
+        self:ApplyLock()
+        button:Hide()
+    end
 end
 
-function RB:_ExitTestMode()
-    testMode = false
-    if InCombatLockdown() then return end
-    -- Restore the real lock + macro state from the saved variables.
-    self:ApplyLock()
+function RB:ToggleTestMode()
+    self:SetTestMode(not testMode)
+end
+
+-- Back-compat alias. /hh test and the keybinding used to call :TestShow(),
+-- keep that name working as a toggle.
+function RB:TestShow()
+    self:ToggleTestMode()
 end
 
 function RB:PlaySound()

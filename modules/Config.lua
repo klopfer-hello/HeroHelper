@@ -417,11 +417,20 @@ function Config:BuildGeneralTab(panel)
         if HH.ReminderButton then HH.ReminderButton:ApplyPosition() end
         HH:Print("Reminder button position reset.", HH.Colors.success)
     end)
+    y = y - ROW_HEIGHT
 
-    local testBtn = MakeFlatButton(panel, "Show test reminder", 160, 22)
-    testBtn:SetPoint("LEFT", resetBtn, "RIGHT", 6, 0)
-    testBtn:SetScript("OnClick", function()
-        if HH.ReminderButton then HH.ReminderButton:TestShow() end
+    -- Persistent test-mode toggle. While enabled the reminder button is
+    -- forced visible, force-unlocked, and completely disarmed (clicks and
+    -- drags never fire the real cast). Uncheck when you're done positioning.
+    local cbTest = MakeCheckbox(panel, "Test mode (show button for positioning)")
+    cbTest:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, y)
+    cbTest:HookClick(function(checked)
+        if HH.ReminderButton then
+            HH.ReminderButton:SetTestMode(checked)
+            -- If SetTestMode refused (in combat), revert the checkbox visual
+            -- so it reflects reality.
+            cbTest:SetChecked(HH.ReminderButton:IsTestMode())
+        end
     end)
     y = y - ROW_HEIGHT
 
@@ -462,6 +471,7 @@ function Config:BuildGeneralTab(panel)
         cbMinimap:SetChecked(HH.db.settings.showMinimap ~= false)
         cbLocked:SetChecked(HH.chardb.settings.button.locked)
         cbSoundEnabled:SetChecked(HH.chardb.settings.soundEnabled)
+        cbTest:SetChecked(HH.ReminderButton and HH.ReminderButton:IsTestMode() or false)
     end)
 end
 
