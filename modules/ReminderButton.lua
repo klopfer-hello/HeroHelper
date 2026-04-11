@@ -19,6 +19,14 @@
         during combat, so this is safe.
       * The glow is achieved by animating a texture on OnUpdate — no
         blizzard glow template is needed for TBC.
+      * CRITICAL: SecureActionButtonTemplate makes the button a *protected
+        frame*, which means calling :Show()/:Hide()/:SetSize()/:SetPoint()
+        on it during combat is silently blocked by the WoW secure-code
+        restriction. Since the reminder has to appear *in combat*, the
+        button is wrapped in a non-protected container Frame. Visibility,
+        sizing and positioning all go through the container — the protected
+        child inherits them via SetAllPoints and is never touched by
+        unprotected code during combat.
 ]]
 
 local ADDON_NAME, HH = ...
@@ -26,6 +34,9 @@ local ADDON_NAME, HH = ...
 HH.ReminderButton = {}
 local RB = HH.ReminderButton
 
+-- Non-protected wrapper frame that owns the visible state. See the comment
+-- block above for why this wrapper exists.
+local container
 local button
 -- True while TestShow() is displaying a preview reminder. Suppresses the cast
 -- macro so clicking / dragging the preview button never actually fires BL/Hero.
@@ -119,8 +130,9 @@ function RB:Initialize()
     end)
     HH.Events:On("COOLDOWN_CHANGED", function()
         -- If BL/Hero actually went on cooldown (i.e. we successfully cast),
-        -- schedule a fade-out.
-        if button and button:IsShown() and HH:IsSpellOnCooldown() then
+        -- schedule a fade-out. IsShown on the non-protected container
+        -- reflects the real visible state after the wrapper refactor.
+        if container and container:IsShown() and HH:IsSpellOnCooldown() then
             local fade = HH.chardb.settings.postCastFade or 2
             C_Timer.After(fade, function() RB:Hide() end)
         end
@@ -130,14 +142,22 @@ end
 function RB:CreateButton()
     if button then return end
 
-    button = CreateFrame("Button", "HeroHelperReminderButton", UIParent, "SecureActionButtonTemplate")
+    -- Non-protected container — owns show/hide/size/position so we can
+    -- touch it during combat without tripping the protected-frame rules.
+    container = CreateFrame("Frame", "HeroHelperReminderContainer", UIParent)
+    container:SetFrameStrata("HIGH")
+    container:SetFrameLevel(100)
+    container:SetClampedToScreen(true)
+    container:SetMovable(true)
+    container:Hide()
+
+    button = CreateFrame("Button", "HeroHelperReminderButton", container, "SecureActionButtonTemplate")
+    button:SetAllPoints(container)
     button:SetFrameStrata("HIGH")
-    button:SetFrameLevel(100)
-    button:SetClampedToScreen(true)
+    button:SetFrameLevel(101)
     button:RegisterForClicks("AnyUp", "AnyDown")
     button:RegisterForDrag("LeftButton")
     button:EnableMouse(true)
-    button:Hide()
 
     -- Icon — solid spell icon, anchored to the button. TexCoord cropping
     -- trims the standard 8% Blizzard icon border so the artwork reaches the
@@ -186,15 +206,16 @@ function RB:CreateButton()
     -- Secure macrotext: cast Heroism or Bloodlust at the player
     button:SetAttribute("type1", "macro")
 
-    -- Drag handlers (only active when unlocked)
-    button:SetScript("OnDragStart", function(self)
+    -- Drag handlers (only active when unlocked). We move the non-protected
+    -- container so saved position/size edits never touch the secure button.
+    button:SetScript("OnDragStart", function()
         if not HH.chardb.settings.button.locked then
-            self:StartMoving()
+            container:StartMoving()
         end
     end)
-    button:SetScript("OnDragStop", function(self)
-        self:StopMovingOrSizing()
-        local point, _, relativePoint, x, y = self:GetPoint()
+    button:SetScript("OnDragStop", function()
+        container:StopMovingOrSizing()
+        local point, _, relativePoint, x, y = container:GetPoint()
         HH.chardb.settings.button.point         = point
         HH.chardb.settings.button.relativePoint = relativePoint
         HH.chardb.settings.button.x             = x
@@ -235,16 +256,18 @@ end
 -- ============================================================================
 
 function RB:ApplyPosition()
-    if not button then return end
+    if not container then return end
     local s = HH.chardb.settings.button
-    button:ClearAllPoints()
-    button:SetPoint(s.point or "CENTER", UIParent, s.relativePoint or "CENTER", s.x or 0, s.y or 0)
+    container:ClearAllPoints()
+    container:SetPoint(s.point or "CENTER", UIParent, s.relativePoint or "CENTER", s.x or 0, s.y or 0)
 end
 
 function RB:ApplySize()
-    if not button then return end
+    if not container then return end
     local size = HH.chardb.settings.button.size or 40
-    button:SetSize(size, size)
+    -- Sizing the container is safe in combat; the protected button
+    -- follows via SetAllPoints without any direct SetSize call on it.
+    container:SetSize(size, size)
 
     -- Anchor the pulse to the button's four corners with a symmetric
     -- outward offset (30% of the button size on each side). This keeps the
@@ -259,7 +282,7 @@ function RB:ApplySize()
 end
 
 function RB:ApplyLock()
-    if not button then return end
+    if not container then return end
     -- In test mode the button is always draggable regardless of the saved
     -- lock state, so ApplyLock only touches the secure macrotext. The
     -- effective move/drag state is restored when test mode is disabled.
@@ -268,7 +291,8 @@ function RB:ApplyLock()
         return
     end
     local locked = HH.chardb.settings.button.locked
-    button:SetMovable(not locked)
+    -- SetMovable lives on the container — that's what StartMoving acts on.
+    container:SetMovable(not locked)
     if locked then
         button:RegisterForDrag() -- unregister drag
     else
@@ -319,22 +343,24 @@ end
 -- ============================================================================
 
 function RB:Show()
-    if not button then return end
+    if not container then return end
     -- If a real trigger fires while the user is still in test mode (e.g.
     -- they forgot to disable it and pulled), exit test mode first so the
     -- button is armed for the real fight.
     if testMode then self:SetTestMode(false) end
     button.label:SetText(HH.State.currentBossName or "HeroHelper")
-    button:Show()
+    -- Show the non-protected container, not the secure button — calling
+    -- :Show() on a protected frame during combat is silently blocked.
+    container:Show()
     self:PlaySound()
 end
 
 function RB:Hide()
-    if not button then return end
+    if not container then return end
     -- Test mode is sticky — don't let combat end / debuff / cast auto-hide
     -- kick us out of it. Only explicit SetTestMode(false) can exit test.
     if testMode then return end
-    button:Hide()
+    container:Hide()
 end
 
 -- ============================================================================
@@ -356,7 +382,7 @@ function RB:IsTestMode()
 end
 
 function RB:SetTestMode(enable)
-    if not button then return end
+    if not container then return end
     if InCombatLockdown() then
         HH:Print("Cannot change test mode while in combat.", HH.Colors.warning)
         return
@@ -364,19 +390,20 @@ function RB:SetTestMode(enable)
 
     if enable then
         testMode = true
-        -- Force drag enabled regardless of saved lock
-        button:SetMovable(true)
+        -- Force drag enabled regardless of saved lock. Dragging moves the
+        -- container, so SetMovable lives there.
+        container:SetMovable(true)
         button:RegisterForDrag("LeftButton")
         -- ApplyMacrotext sees testMode == true and clears macrotext1 to ""
         self:ApplyMacrotext()
         button.label:SetText("TEST")
-        button:Show()
+        container:Show()
         self:PlaySound()
     else
         testMode = false
         -- Restore the saved lock + the real cast macro
         self:ApplyLock()
-        button:Hide()
+        container:Hide()
     end
 end
 
