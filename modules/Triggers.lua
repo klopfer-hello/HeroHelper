@@ -86,30 +86,28 @@ end
 -- Try to fire the reminder based on the trigger config for the current boss.
 --
 -- The latch (HH.State.triggered = true) happens immediately so any other
--- trigger condition that satisfies during the coordination grace window
--- (HP poll tick, second BOSS_PULL, time timer) treats the pull as
--- already-handled and silently no-ops on its own IsReady gate.
+-- trigger condition that satisfies during this pull (HP poll tick, second
+-- BOSS_PULL, time timer) treats the pull as already-handled and silently
+-- no-ops on its own IsReady gate.
 --
--- The actual reminder fire is delegated to Comms:Coordinate, which either
--- runs the closure immediately (solo / coord disabled) or after a 500ms
--- grace window in which other HeroHelper-using shamans can claim the pull.
--- See modules/Comms.lua for the protocol.
+-- Multi-shaman coordination is handled by HH.Comms:AmIElectedWinner: the
+-- elected winner (per the locked or live roster) is the only one whose
+-- TryFire actually shows the reminder. Non-winners latch their own
+-- triggered state and stay completely silent — no popup, no sound, nothing.
+-- See modules/Comms.lua for the election protocol and lock semantics.
 local function TryFire(reason)
     if not IsReady() then return end
 
     HH.State.triggered = true
     local bossID = HH.State.currentBossID
 
-    local function ActuallyFire()
-        HH:Debug("TRIGGER FIRED: " .. tostring(reason))
-        HH.Events:Fire("HEROHELPER_TRIGGER", bossID, reason)
+    if HH.Comms and HH.Comms.AmIElectedWinner and not HH.Comms:AmIElectedWinner() then
+        HH:Debug("TRIGGER SUPPRESSED: another shaman is the elected winner")
+        return
     end
 
-    if HH.Comms and HH.Comms.Coordinate then
-        HH.Comms:Coordinate(bossID, reason, ActuallyFire)
-    else
-        ActuallyFire()
-    end
+    HH:Debug("TRIGGER FIRED: " .. tostring(reason))
+    HH.Events:Fire("HEROHELPER_TRIGGER", bossID, reason)
 end
 
 -- ============================================================================

@@ -357,6 +357,7 @@ local events = {
 
     -- Multi-shaman coordination via addon-message channel (Comms module)
     "CHAT_MSG_ADDON",
+    "GROUP_ROSTER_UPDATE",
 }
 
 for _, event in ipairs(events) do
@@ -441,6 +442,11 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         HH.Events:Fire("CHAT_MSG_ADDON", ...)
         return
     end
+
+    if event == "GROUP_ROSTER_UPDATE" then
+        HH.Events:Fire("GROUP_ROSTER_UPDATE")
+        return
+    end
 end)
 
 -- ============================================================================
@@ -512,6 +518,33 @@ SlashCmdList["HEROHELPER"] = function(msg)
         end
         if HH.Triggers and HH.Triggers.EnableMobTest then
             HH.Triggers:EnableMobTest(arg)
+        end
+        return
+    end
+
+    -- /hh roster — dumps the current Comms roster for diagnostics. Shows
+    -- whether the raid lock is active, who is in the (locked or live)
+    -- roster, what their priorities are, and who is the elected winner.
+    if msg == "roster" then
+        if not (HH.Comms and HH.Comms.GetActiveRosterSorted) then
+            HH:Print("Coordination module not loaded.", HH.Colors.warning)
+            return
+        end
+        local sorted = HH.Comms:GetActiveRosterSorted()
+        local locked = HH.Comms:IsLocked()
+        local winner = HH.Comms:GetElectedWinner()
+        HH:Print(("--- HeroHelper roster (%s) ---"):format(
+            locked and "LOCKED" or "live"), HH.Colors.highlight)
+        if #sorted == 0 then
+            HH:Print("  (no HeroHelper users in the group)", HH.Colors.info)
+        else
+            local roleNames = { [1] = "Primary", [2] = "Secondary", [3] = "Backup", [99] = "Auto" }
+            for i, b in ipairs(sorted) do
+                local marker = (b.name == winner) and " [ACTIVE]" or ""
+                HH:Print(("  %d. %s — %s%s"):format(
+                    i, b.name, roleNames[b.priority] or ("priority " .. b.priority),
+                    marker), HH.Colors.info)
+            end
         end
         return
     end
