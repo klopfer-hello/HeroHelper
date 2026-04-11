@@ -214,6 +214,30 @@ end
 --
 -- Each dropdown needs a globally unique frame name, so we generate one per
 -- call via a monotonic counter.
+-- Force-clear every button on the shared list frame at `level` and reset
+-- its numButtons counter. LibDD's UIDropDownMenu_InitializeHelper is
+-- *supposed* to do this before an init function runs, but in practice
+-- (observed live: sound dropdown opened with its own 5 items plus 4 stale
+-- raid entries leaking through as buttons 6-9) the clear does not cover
+-- buttons that belonged to a previously-initialized dropdown. Running
+-- this at the top of every init closure guarantees a clean slate.
+local function ForceClearDropDownList(level)
+    level = level or 1
+    local listFrameName = "L_DropDownList" .. level
+    local listFrame = _G[listFrameName]
+    if not listFrame then return end
+    -- L_UIDROPDOWNMENU_MAXBUTTONS is the dynamic high-water mark of
+    -- buttons ever created; blasting through that range covers every
+    -- button any dropdown has ever added at this level.
+    local maxButtons = _G.L_UIDROPDOWNMENU_MAXBUTTONS or 32
+    for j = 1, maxButtons do
+        local btn = _G[listFrameName .. "Button" .. j]
+        if btn then btn:Hide() end
+    end
+    listFrame.numButtons = 0
+    listFrame.maxWidth   = 0
+end
+
 local dropdownCounter = 0
 -- `debugTag` is accepted but unused — it was the hook for loud per-dropdown
 -- debug prints during the sound-dropdown investigation; kept in the
@@ -232,6 +256,7 @@ local function MakeDropdown(parent, width, items, onSelect, initialText, debugTa
         LibDD:UIDropDownMenu_SetText(dd, initialText or "")
 
         LibDD:UIDropDownMenu_Initialize(dd, function(self, level)
+            ForceClearDropDownList(level or 1)
             for _, entry in ipairs(items) do
                 local info = LibDD:UIDropDownMenu_CreateInfo()
                 info.text         = entry.label
@@ -249,6 +274,7 @@ local function MakeDropdown(parent, width, items, onSelect, initialText, debugTa
         UIDropDownMenu_SetWidth(dd, width)
         UIDropDownMenu_SetText(dd, initialText or "")
         UIDropDownMenu_Initialize(dd, function(self, level)
+            ForceClearDropDownList(level or 1)
             for _, entry in ipairs(items) do
                 local info = UIDropDownMenu_CreateInfo()
                 info.text         = entry.label
