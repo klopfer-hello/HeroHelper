@@ -804,7 +804,8 @@ function Config:RefreshBossList()
         if canPhase then
             table.insert(typeItems, { label = "Phase", value = "phase" })
         end
-        table.insert(typeItems, { label = "Off", value = "off" })
+        table.insert(typeItems, { label = "Multi", value = "any" })
+        table.insert(typeItems, { label = "Off",   value = "off" })
 
         -- Unit suffix label, swapped per trigger type so the player can
         -- tell at a glance whether the value box means percent, seconds
@@ -829,6 +830,15 @@ function Config:RefreshBossList()
         editBg:SetColorTexture(0.10, 0.10, 0.13, 1)
         AddThinBorder(edit, D.border[1], D.border[2], D.border[3], D.borA)
 
+        -- "Edit..." button shown in the value slot when type is "any".
+        -- Opens the compound popup for this specific boss.
+        local editCompoundBtn = MakeFlatButton(row, "Edit...", 70, 20)
+        editCompoundBtn:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+        editCompoundBtn:Hide()
+        editCompoundBtn:SetScript("OnClick", function()
+            Config:ShowCompoundPopup(bossID)
+        end)
+
         local function UpdateEdit()
             -- Read-only: pull the effective config (default + any existing
             -- override) without materializing a blank override row.
@@ -838,18 +848,28 @@ function Config:RefreshBossList()
                 edit:SetText(tostring(effective.hp or 35))
                 unitLabel:SetText("%")
                 unitLabel:Show()
+                editCompoundBtn:Hide()
             elseif effective.type == "phase" then
                 edit:Show()
                 edit:SetText(tostring(effective.phase or 2))
                 unitLabel:Hide()
+                editCompoundBtn:Hide()
             elseif effective.type == "time" then
                 edit:Show()
                 edit:SetText(tostring(effective.seconds or 30))
                 unitLabel:SetText("s")
                 unitLabel:Show()
+                editCompoundBtn:Hide()
+            elseif effective.type == "any" then
+                -- Compound: hide the value editor entirely and surface
+                -- the per-boss popup launcher in its place.
+                edit:Hide()
+                unitLabel:Hide()
+                editCompoundBtn:Show()
             else
                 edit:Hide()
                 unitLabel:Hide()
+                editCompoundBtn:Hide()
             end
         end
 
@@ -877,6 +897,8 @@ function Config:RefreshBossList()
             initialLabel = "Phase"
         elseif cfg.type == "time" then
             initialLabel = "Time"
+        elseif cfg.type == "any" then
+            initialLabel = "Multi"
         elseif cfg.type == "off" then
             initialLabel = "Off"
         end
@@ -889,11 +911,24 @@ function Config:RefreshBossList()
             HH.chardb.bosses[bossID] = HH.chardb.bosses[bossID] or {}
             local override = HH.chardb.bosses[bossID]
             if value == "off" then
-                override.enabled = false
-                override.type = nil
+                override.enabled    = false
+                override.type       = nil
+                override.conditions = nil
+            elseif value == "any" then
+                override.enabled    = true
+                override.type       = "any"
+                override.conditions = override.conditions or {}
+                -- Clear single-type fields when switching INTO compound.
+                override.hp      = nil
+                override.phase   = nil
+                override.seconds = nil
+                -- Open the editor immediately so the user can populate
+                -- conditions. Cancel reverts the override if it was new.
+                Config:ShowCompoundPopup(bossID)
             else
-                override.enabled = true
-                override.type = value
+                override.enabled    = true
+                override.type       = value
+                override.conditions = nil  -- leaving compound clears the list
                 if value == "hp"    and not override.hp      then override.hp      = boss.default.hp      or 35 end
                 if value == "phase" and not override.phase   then override.phase   = boss.default.phase   or 2  end
                 if value == "time"  and not override.seconds then override.seconds = boss.default.seconds or 30 end
@@ -1062,6 +1097,208 @@ function Config:ShowImportPopup()
         end
         HH:Print(string.format("Imported %d boss entries (%d skipped).", applied, skipped), HH.Colors.success)
         Config:RefreshBossList()
+        f:Hide()
+    end)
+
+    f:Show()
+    f:Raise()
+end
+
+-- ============================================================================
+-- Compound trigger editor popup
+-- ============================================================================
+--
+-- Lets the player build a compound (any-of) trigger for a single boss
+-- via four checkboxes (Pull / HP / Phase / Time) with inline value
+-- editors. Save writes a { type = "any", conditions = {...} } override
+-- into HH.chardb.bosses[bossID]; Cancel reverts the dropdown change if
+-- the boss didn't already have compound conditions.
+--
+-- The popup is a single shared frame; ShowCompoundPopup re-binds it to
+-- whichever boss the player is editing.
+
+local compoundPopup = nil
+
+local function CreateCompoundPopup()
+    if compoundPopup then return compoundPopup end
+
+    local f = CreateFrame("Frame", "HeroHelperCompoundPopup", UIParent,
+        BackdropTemplateMixin and "BackdropTemplate" or nil)
+    f:SetSize(360, 230)
+    f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    f:SetFrameStrata("FULLSCREEN_DIALOG")
+    f:SetMovable(true)
+    f:EnableMouse(true)
+    f:SetClampedToScreen(true)
+    f:Hide()
+
+    f:RegisterForDrag("LeftButton")
+    f:SetScript("OnDragStart", f.StartMoving)
+    f:SetScript("OnDragStop", f.StopMovingOrSizing)
+
+    if f.SetBackdrop then
+        f:SetBackdrop({
+            bgFile   = "Interface\\ChatFrame\\ChatFrameBackground",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            tile = true, tileSize = 16, edgeSize = 8,
+            insets = { left = 2, right = 2, top = 2, bottom = 2 },
+        })
+        f:SetBackdropColor(D.bg[1], D.bg[2], D.bg[3], D.bgA)
+        f:SetBackdropBorderColor(D.border[1], D.border[2], D.border[3], D.borA)
+    end
+
+    local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    title:SetPoint("TOPLEFT", f, "TOPLEFT", PADDING, -PADDING)
+    f.title = title
+
+    local subtitle = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    subtitle:SetPoint("TOPLEFT", f, "TOPLEFT", PADDING, -PADDING - 18)
+    subtitle:SetText("Trigger when ANY of the following conditions are met:")
+    subtitle:SetTextColor(D.label[1], D.label[2], D.label[3])
+
+    -- Helper to make a "checkbox + optional edit + suffix label" row.
+    local function MakeRow(parent, labelText, withEdit, suffix, yOffset)
+        local cb = MakeCheckbox(parent, labelText)
+        cb:SetPoint("TOPLEFT", parent, "TOPLEFT", PADDING, yOffset)
+
+        local edit, suffixLbl
+        if withEdit then
+            edit = CreateFrame("EditBox", nil, parent)
+            edit:SetSize(40, 20)
+            edit:SetPoint("LEFT", cb, "RIGHT", 110, 0)
+            edit:SetAutoFocus(false)
+            edit:SetFontObject("GameFontHighlightSmall")
+            edit:SetJustifyH("CENTER")
+            edit:SetMaxLetters(3)
+            local bg = edit:CreateTexture(nil, "BACKGROUND")
+            bg:SetAllPoints()
+            bg:SetColorTexture(0.10, 0.10, 0.13, 1)
+            AddThinBorder(edit, D.border[1], D.border[2], D.border[3], D.borA)
+            edit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+            edit:SetScript("OnEnterPressed",  function(self) self:ClearFocus() end)
+
+            suffixLbl = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            suffixLbl:SetPoint("LEFT", edit, "RIGHT", 3, 0)
+            suffixLbl:SetText(suffix or "")
+            suffixLbl:SetTextColor(D.label[1], D.label[2], D.label[3])
+        end
+        return cb, edit, suffixLbl
+    end
+
+    f.cbPull,  _,         _          = MakeRow(f, "Pull (cast immediately on engage)", false, nil, -PADDING - 40)
+    f.cbHP,    f.editHP,  f.suffixHP = MakeRow(f, "HP percent below",                  true,  "%", -PADDING - 64)
+    f.cbPhase, f.editPhase, _        = MakeRow(f, "Phase reached",                     true,  "",  -PADDING - 88)
+    f.cbTime,  f.editTime, f.suffixT = MakeRow(f, "Seconds after pull",                true,  "s", -PADDING - 112)
+
+    -- Action buttons
+    local btnSave = MakeFlatButton(f, "Save", 90, 22)
+    btnSave:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -PADDING - 100, PADDING)
+    f.btnSave = btnSave
+
+    local btnCancel = MakeFlatButton(f, "Cancel", 90, 22)
+    btnCancel:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -PADDING, PADDING)
+    f.btnCancel = btnCancel
+
+    table.insert(UISpecialFrames, "HeroHelperCompoundPopup")
+
+    compoundPopup = f
+    return f
+end
+
+function Config:ShowCompoundPopup(bossID)
+    local boss = HH.Database:Get(bossID)
+    if not boss then return end
+
+    local f = CreateCompoundPopup()
+    f._bossID = bossID
+
+    -- Snapshot the existing override BEFORE the popup runs so Cancel can
+    -- revert cleanly. The dropdown's onSelect already wrote
+    -- override.type = "any" with empty conditions; if we cancel and
+    -- conditions are still empty we should clear the partial override.
+    local override = HH.chardb.bosses[bossID]
+    f._wasNewCompound = (
+        override
+        and override.type == "any"
+        and (not override.conditions or #override.conditions == 0)
+    )
+
+    -- Phase row only meaningful for bosses with yell patterns.
+    local canPhase = boss.yells ~= nil and next(boss.yells) ~= nil
+    f.cbPhase:SetShown(canPhase)
+    f.editPhase:SetShown(canPhase)
+
+    -- Pre-fill from current effective config (default or existing override).
+    local cfg = HH.Database:GetTriggerConfig(bossID) or boss.default
+    local existing = (cfg and cfg.type == "any" and cfg.conditions) or {}
+    f.cbPull:SetChecked(false)
+    f.cbHP:SetChecked(false)
+    f.cbPhase:SetChecked(false)
+    f.cbTime:SetChecked(false)
+    f.editHP:SetText(tostring(boss.default.hp or 25))
+    f.editPhase:SetText(tostring(boss.default.phase or 2))
+    f.editTime:SetText(tostring(boss.default.seconds or 60))
+    for _, cond in ipairs(existing) do
+        if cond.type == "pull" then
+            f.cbPull:SetChecked(true)
+        elseif cond.type == "hp" then
+            f.cbHP:SetChecked(true)
+            f.editHP:SetText(tostring(cond.hp or 25))
+        elseif cond.type == "phase" and canPhase then
+            f.cbPhase:SetChecked(true)
+            f.editPhase:SetText(tostring(cond.phase or 2))
+        elseif cond.type == "time" then
+            f.cbTime:SetChecked(true)
+            f.editTime:SetText(tostring(cond.seconds or 60))
+        end
+    end
+
+    f.title:SetText("|cFFFF7D1AHeroHelper|r  " .. boss.name)
+
+    f.btnSave:SetScript("OnClick", function()
+        local conditions = {}
+        if f.cbPull:GetChecked() then
+            conditions[#conditions + 1] = { type = "pull" }
+        end
+        if f.cbHP:GetChecked() then
+            local v = tonumber(f.editHP:GetText()) or 25
+            conditions[#conditions + 1] = { type = "hp", hp = math.max(1, math.min(99, v)) }
+        end
+        if canPhase and f.cbPhase:GetChecked() then
+            local v = tonumber(f.editPhase:GetText()) or 2
+            conditions[#conditions + 1] = { type = "phase", phase = math.max(1, math.min(10, v)) }
+        end
+        if f.cbTime:GetChecked() then
+            local v = tonumber(f.editTime:GetText()) or 60
+            conditions[#conditions + 1] = { type = "time", seconds = math.max(1, math.min(600, v)) }
+        end
+
+        if #conditions == 0 then
+            HH:Print("Compound trigger needs at least one condition.", HH.Colors.warning)
+            return
+        end
+
+        HH.chardb.bosses[bossID] = HH.chardb.bosses[bossID] or {}
+        local o = HH.chardb.bosses[bossID]
+        o.enabled    = true
+        o.type       = "any"
+        o.conditions = conditions
+        -- Clear single-type fields so they don't bleed through.
+        o.hp      = nil
+        o.phase   = nil
+        o.seconds = nil
+
+        f:Hide()
+        Config:RefreshBossList()
+    end)
+
+    f.btnCancel:SetScript("OnClick", function()
+        if f._wasNewCompound then
+            -- Drop the partial override so the dropdown reverts to the
+            -- database default on the next refresh.
+            HH.chardb.bosses[bossID] = nil
+            Config:RefreshBossList()
+        end
         f:Hide()
     end)
 

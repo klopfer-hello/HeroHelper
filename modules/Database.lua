@@ -443,10 +443,21 @@ function DB:GetTriggerConfig(id)
     local cfg = {}
     for k, v in pairs(boss.default) do cfg[k] = v end
     if override then
-        if override.type    then cfg.type    = override.type    end
-        if override.hp      then cfg.hp      = override.hp      end
-        if override.phase   then cfg.phase   = override.phase   end
-        if override.seconds then cfg.seconds = override.seconds end
+        -- Compound overrides REPLACE the default wholesale: merging
+        -- single-type fields into a compound config (or vice versa)
+        -- would produce a frankenconfig that none of the trigger
+        -- handlers know how to interpret.
+        if override.type == "any" and override.conditions then
+            cfg = {
+                type       = "any",
+                conditions = override.conditions,
+            }
+        else
+            if override.type    then cfg.type    = override.type    end
+            if override.hp      then cfg.hp      = override.hp      end
+            if override.phase   then cfg.phase   = override.phase   end
+            if override.seconds then cfg.seconds = override.seconds end
+        end
     end
     return cfg
 end
@@ -582,6 +593,37 @@ local function EncodeSpec(cfg, enabled)
     if cfg.type == "hp"    and cfg.hp      then return "hp:"    .. tostring(cfg.hp)      end
     if cfg.type == "phase" and cfg.phase   then return "phase:" .. tostring(cfg.phase)   end
     if cfg.type == "time"  and cfg.seconds then return "time:"  .. tostring(cfg.seconds) end
+    if cfg.type == "any"   and cfg.conditions then
+        -- Compound encoding: any(sub;sub;sub) where each sub is itself a
+        -- single-type spec. Sub-encoding recurses into EncodeSpec; nested
+        -- compounds are flattened to a single level (we never produce one).
+        local parts = {}
+        for _, sub in ipairs(cfg.conditions) do
+            local s = EncodeSpec(sub, true)
+            if s and s ~= "off" then parts[#parts + 1] = s end
+        end
+        if #parts > 0 then
+            return "any(" .. table.concat(parts, ";") .. ")"
+        end
+    end
+    return nil
+end
+
+-- Decodes a single sub-spec into a condition table for compound triggers.
+-- Returns nil if the sub-spec is unrecognized.
+local function DecodeSubSpec(sub)
+    if sub == "pull" then
+        return { type = "pull" }
+    end
+    local kind, val = sub:match("^(%a+):(%d+)$")
+    val = tonumber(val)
+    if kind == "hp" and val then
+        return { type = "hp", hp = math.max(1, math.min(99, val)) }
+    elseif kind == "phase" and val then
+        return { type = "phase", phase = math.max(1, math.min(10, val)) }
+    elseif kind == "time" and val then
+        return { type = "time", seconds = math.max(1, math.min(600, val)) }
+    end
     return nil
 end
 
@@ -599,18 +641,32 @@ local function ParseEntries(rest)
             elseif spec == "off" then
                 o.enabled = false
             else
-                local kind, val = spec:match("^(%a+):(%d+)$")
-                if kind == "hp" then
-                    o.type = "hp"
-                    o.hp   = math.max(1, math.min(99, tonumber(val) or 35))
-                elseif kind == "phase" then
-                    o.type  = "phase"
-                    o.phase = math.max(1, math.min(10, tonumber(val) or 2))
-                elseif kind == "time" then
-                    o.type    = "time"
-                    o.seconds = math.max(1, math.min(600, tonumber(val) or 30))
+                -- Compound: any(sub;sub;sub)
+                local anyBody = spec:match("^any%((.+)%)$")
+                if anyBody then
+                    o.type       = "any"
+                    o.conditions = {}
+                    for sub in (anyBody .. ";"):gmatch("([^;]+);") do
+                        local cond = DecodeSubSpec(sub)
+                        if cond then
+                            o.conditions[#o.conditions + 1] = cond
+                        end
+                    end
+                    if #o.conditions == 0 then o = nil end
                 else
-                    o = nil
+                    local kind, val = spec:match("^(%a+):(%d+)$")
+                    if kind == "hp" then
+                        o.type = "hp"
+                        o.hp   = math.max(1, math.min(99, tonumber(val) or 35))
+                    elseif kind == "phase" then
+                        o.type  = "phase"
+                        o.phase = math.max(1, math.min(10, tonumber(val) or 2))
+                    elseif kind == "time" then
+                        o.type    = "time"
+                        o.seconds = math.max(1, math.min(600, tonumber(val) or 30))
+                    else
+                        o = nil
+                    end
                 end
             end
             if o then
