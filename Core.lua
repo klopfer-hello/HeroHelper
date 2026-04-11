@@ -452,39 +452,6 @@ SlashCmdList["HEROHELPER"] = function(msg)
         return
     end
 
-    -- Dumps everything we know about sound registration so we can see
-    -- *from the live client* how many entries GetSoundList is returning,
-    -- what LibSharedMedia has, and what the saved setting is.
-    if msg == "debugsound" then
-        HH:Print("--- sound debug ---", HH.Colors.highlight)
-        HH:Print("saved soundEnabled = " .. tostring(HH.chardb.settings.soundEnabled), HH.Colors.info)
-        HH:Print("saved sound        = " .. tostring(HH.chardb.settings.sound),        HH.Colors.info)
-        if HH.ReminderButton and HH.ReminderButton.GetSoundList then
-            local list = HH.ReminderButton:GetSoundList()
-            HH:Print("GetSoundList() returned " .. tostring(#list) .. " entries:", HH.Colors.info)
-            for i, key in ipairs(list) do
-                HH:Print(("  [%d] %s"):format(i, tostring(key)), HH.Colors.info)
-            end
-        else
-            HH:Print("HH.ReminderButton:GetSoundList missing!", HH.Colors.warning)
-        end
-        local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
-        if LSM then
-            local lsmList = LSM:List("sound") or {}
-            HH:Print("LSM:List('sound') returned " .. tostring(#lsmList) .. " entries:", HH.Colors.info)
-            for i, key in ipairs(lsmList) do
-                HH:Print(("  [%d] %s"):format(i, tostring(key)), HH.Colors.info)
-            end
-            HH:Print("LSM:IsValid('sound','HeroHelper: Raid Warning') = " ..
-                tostring(LSM:IsValid("sound", "HeroHelper: Raid Warning")), HH.Colors.info)
-        else
-            HH:Print("LibSharedMedia not loaded", HH.Colors.warning)
-        end
-        local LibDD = LibStub and LibStub("LibUIDropDownMenu-4.0", true)
-        HH:Print("LibUIDropDownMenu loaded = " .. tostring(LibDD ~= nil), HH.Colors.info)
-        return
-    end
-
     if msg == "reset" then
         HH.chardb.settings.button.point         = "CENTER"
         HH.chardb.settings.button.relativePoint = "CENTER"
@@ -503,5 +470,4 @@ SlashCmdList["HEROHELPER"] = function(msg)
     HH:Print("  /hh reset       - reset button position")
     HH:Print("  /hh test        - toggle test mode (button stays visible for positioning)")
     HH:Print("  /hh debug       - toggle debug output")
-    HH:Print("  /hh debugsound  - dump sound-list / LibDD / LSM state")
 end
