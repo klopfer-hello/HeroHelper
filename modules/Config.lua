@@ -500,6 +500,17 @@ function Config:BuildGeneralTab(panel)
     -- "Sound\Interface\..." paths are never added to the LSM list).
     -- Selecting an entry both saves it and plays a one-shot preview so the
     -- user can audition the sound without having to hit the Preview button.
+    --
+    -- IMPORTANT: anchor the dropdown to a label with ("LEFT", label, "RIGHT",
+    -- ...) rather than directly to the panel. The working raid dropdown on
+    -- the Bosses tab uses this exact pattern, and anchoring to panel TOPLEFT
+    -- with a -16 X offset (the previous shape) somehow leaves the arrow
+    -- button non-clickable even though LibUIDropDownMenu is in use.
+    local soundLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    soundLabel:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, y - 4)
+    soundLabel:SetText("Sound:")
+    soundLabel:SetTextColor(D.label[1], D.label[2], D.label[3])
+
     local soundItems = {}
     local soundList = (HH.ReminderButton and HH.ReminderButton:GetSoundList())
         or { "HeroHelper: Raid Warning" }
@@ -510,7 +521,7 @@ function Config:BuildGeneralTab(panel)
         HH.chardb.settings.sound = value
         if HH.ReminderButton then HH.ReminderButton:PreviewSound() end
     end, HH.chardb.settings.sound or "HeroHelper: Raid Warning")
-    soundDD:SetPoint("TOPLEFT", panel, "TOPLEFT", -16, y)
+    soundDD:SetPoint("LEFT", soundLabel, "RIGHT", 4, -2)
     y = y - (ROW_HEIGHT + 6)
 
     -- Preview always plays, regardless of the "Play sound on trigger" flag —
