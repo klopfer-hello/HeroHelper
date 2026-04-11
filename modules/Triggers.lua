@@ -234,10 +234,7 @@ local function PollMobTest()
     end
 
     local unit = FindUnitByGUID(mobTest.guid)
-    if not unit then
-        -- Mob out of reach this tick; keep waiting.
-        return
-    end
+    if not unit then return end
 
     if UnitIsDeadOrGhost(unit) then
         T:DisableMobTest("target died before reaching threshold")
@@ -251,10 +248,7 @@ local function PollMobTest()
     if pct <= mobTest.threshold then
         HH:Print(("Mob test: %s at %d%% — firing reminder."):format(
             mobTest.name or "target", pct), HH.Colors.success)
-        -- RB:Show reads HH.State.currentBossName for the label. Poke the
-        -- mob name in so the reminder displays something useful, then clear
-        -- the ticker. COMBAT_END (or a real pull) will overwrite the state
-        -- again, so we don't bother reverting it here.
+        -- RB:Show reads HH.State.currentBossName for the label.
         HH.State.currentBossName = mobTest.name
         if HH.ReminderButton and HH.ReminderButton.Show then
             HH.ReminderButton:Show()

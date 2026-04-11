@@ -23,10 +23,22 @@
         frame*, which means calling :Show()/:Hide()/:SetSize()/:SetPoint()
         on it during combat is silently blocked by the WoW secure-code
         restriction. Since the reminder has to appear *in combat*, the
-        button is wrapped in a non-protected container Frame. Visibility,
-        sizing and positioning all go through the container — the protected
-        child inherits them via SetAllPoints and is never touched by
-        unprotected code during combat.
+        button is wrapped in a non-protected container Frame, and we do
+        NOT toggle Show/Hide OR move the container at all after Initialize:
+            * Container is created at the player-saved position.
+            * Container is :Show()n exactly once.
+            * "Hidden" / "visible" is toggled purely via container:SetAlpha.
+        SetAlpha on a plain Frame is always allowed — including in combat —
+        and the child button's layout never needs to be recalculated since
+        the container never moves or resizes at runtime. A previous attempt
+        to park the container off-screen and move it back on Show produced
+        a bizarre h=132313 on the protected child, evidently a TBC layout
+        bug triggered by the 30000-unit movement during combat lockdown.
+
+        Consequence: the invisible button still captures clicks on its
+        saved position. That's tolerable because the macrotext is only
+        "armed" when we're about to show the reminder, so clicks on the
+        invisible area are no-ops in practice. See ApplyMacrotext.
 ]]
 
 local ADDON_NAME, HH = ...
@@ -38,6 +50,9 @@ local RB = HH.ReminderButton
 -- block above for why this wrapper exists.
 local container
 local button
+-- Tracks whether the reminder is logically "visible". We can't rely on
+-- container:IsShown() because the container stays permanently Shown.
+local visible = false
 -- True while TestShow() is displaying a preview reminder. Suppresses the cast
 -- macro so clicking / dragging the preview button never actually fires BL/Hero.
 local testMode = false
@@ -130,9 +145,10 @@ function RB:Initialize()
     end)
     HH.Events:On("COOLDOWN_CHANGED", function()
         -- If BL/Hero actually went on cooldown (i.e. we successfully cast),
-        -- schedule a fade-out. IsShown on the non-protected container
-        -- reflects the real visible state after the wrapper refactor.
-        if container and container:IsShown() and HH:IsSpellOnCooldown() then
+        -- schedule a fade-out. Use the logical `visible` flag — the
+        -- container stays permanently :Show()'d so IsShown would always be
+        -- true and this check would misfire on every cooldown change.
+        if container and visible and HH:IsSpellOnCooldown() then
             local fade = HH.chardb.settings.postCastFade or 2
             C_Timer.After(fade, function() RB:Hide() end)
         end
@@ -142,17 +158,46 @@ end
 function RB:CreateButton()
     if button then return end
 
-    -- Non-protected container — owns show/hide/size/position so we can
-    -- touch it during combat without tripping the protected-frame rules.
+    -- Non-protected container — owns alpha/position so we can touch it
+    -- during combat without tripping the protected-frame rules. The
+    -- container is Shown once at Initialize and *never* hidden; see the
+    -- file header for the full rationale. Start it parked off-screen with
+    -- zero alpha so it's logically "hidden" from the player's POV.
     container = CreateFrame("Frame", "HeroHelperReminderContainer", UIParent)
     container:SetFrameStrata("HIGH")
     container:SetFrameLevel(100)
     container:SetClampedToScreen(true)
     container:SetMovable(true)
-    container:Hide()
+    -- Initial size MUST be set before the button is anchored to the
+    -- container so the child button's layout resolves correctly.
+    container:SetSize(40, 40)
+    -- Container is placed at the player-saved position immediately and
+    -- NEVER moved again at runtime. Hide/show toggles only alpha — see
+    -- the file header for the full rationale (TBC layout bug on moves).
+    local s = HH.chardb and HH.chardb.settings and HH.chardb.settings.button
+    container:ClearAllPoints()
+    container:SetPoint(
+        (s and s.point)         or "CENTER",
+        UIParent,
+        (s and s.relativePoint) or "CENTER",
+        (s and s.x)             or 0,
+        (s and s.y)             or 0
+    )
+    container:SetAlpha(0) -- start logically hidden
+    container:Show()
 
     button = CreateFrame("Button", "HeroHelperReminderButton", container, "SecureActionButtonTemplate")
-    button:SetAllPoints(container)
+    -- SINGLE center anchor + explicit SetSize. We originally used 2-point
+    -- TOPLEFT/BOTTOMRIGHT anchors to make the button track container size,
+    -- but TBC's layout evaluator refused to propagate container's height
+    -- through those anchors on a protected button — we observed h=0 at
+    -- init and h=132313 after a position change. A single CENTER anchor
+    -- with an explicit SetSize gives the button concrete, deterministic
+    -- dimensions that don't depend on anchor resolution; ApplySize keeps
+    -- button and container in lockstep when the player changes the size.
+    button:ClearAllPoints()
+    button:SetPoint("CENTER", container, "CENTER", 0, 0)
+    button:SetSize(40, 40)
     button:SetFrameStrata("HIGH")
     button:SetFrameLevel(101)
     button:RegisterForClicks("AnyUp", "AnyDown")
@@ -255,6 +300,10 @@ end
 -- Apply config
 -- ============================================================================
 
+-- Move the container to the player-configured coordinates. Called from
+-- Initialize() to set the initial position, and from the drag OnDragStop
+-- when the player moves the reminder. Safe to call in combat (SetPoint on
+-- a non-protected Frame is allowed).
 function RB:ApplyPosition()
     if not container then return end
     local s = HH.chardb.settings.button
@@ -265,9 +314,15 @@ end
 function RB:ApplySize()
     if not container then return end
     local size = HH.chardb.settings.button.size or 40
-    -- Sizing the container is safe in combat; the protected button
-    -- follows via SetAllPoints without any direct SetSize call on it.
     container:SetSize(size, size)
+    -- Button is CENTER-anchored + explicitly sized (see CreateButton). We
+    -- must also update its size here so it stays in lockstep with the
+    -- container. SetSize on a protected frame is restricted in combat, so
+    -- gate it — the config slider is the only path that calls ApplySize
+    -- at runtime, and sliders can only be moved outside combat anyway.
+    if button and not InCombatLockdown() then
+        button:SetSize(size, size)
+    end
 
     -- Anchor the pulse to the button's four corners with a symmetric
     -- outward offset (30% of the button size on each side). This keeps the
@@ -349,9 +404,10 @@ function RB:Show()
     -- button is armed for the real fight.
     if testMode then self:SetTestMode(false) end
     button.label:SetText(HH.State.currentBossName or "HeroHelper")
-    -- Show the non-protected container, not the secure button — calling
-    -- :Show() on a protected frame during combat is silently blocked.
-    container:Show()
+    -- "Show" is a pure alpha toggle. The container stays at its saved
+    -- position from Initialize; we never move it at runtime.
+    visible = true
+    container:SetAlpha(1)
     self:PlaySound()
 end
 
@@ -360,7 +416,12 @@ function RB:Hide()
     -- Test mode is sticky — don't let combat end / debuff / cast auto-hide
     -- kick us out of it. Only explicit SetTestMode(false) can exit test.
     if testMode then return end
-    container:Hide()
+    visible = false
+    container:SetAlpha(0)
+end
+
+function RB:IsVisible()
+    return visible or testMode
 end
 
 -- ============================================================================
@@ -397,13 +458,15 @@ function RB:SetTestMode(enable)
         -- ApplyMacrotext sees testMode == true and clears macrotext1 to ""
         self:ApplyMacrotext()
         button.label:SetText("TEST")
-        container:Show()
+        container:SetAlpha(1)
         self:PlaySound()
     else
         testMode = false
         -- Restore the saved lock + the real cast macro
         self:ApplyLock()
-        container:Hide()
+        if not visible then
+            container:SetAlpha(0)
+        end
     end
 end
 
