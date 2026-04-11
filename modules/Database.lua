@@ -62,6 +62,7 @@ DB.RAIDS = {
     { key = "mech",    name = "D: The Mechanar",       order = 140, isDungeon = true },
     { key = "bot",     name = "D: The Botanica",       order = 141, isDungeon = true },
     { key = "arc",     name = "D: The Arcatraz",       order = 142, isDungeon = true },
+    { key = "mgt",     name = "D: Magisters' Terrace", order = 150, isDungeon = true },
 }
 
 -- ============================================================================
@@ -154,7 +155,11 @@ DB.BOSSES = {
     },
     ["tk_vr"]           = { raidKey = "tk", name = "Void Reaver",                                       default = { type = "pull" } },
     ["tk_solarian"]     = { raidKey = "tk", name = "High Astromancer Solarian",                         default = { type = "hp", hp = 20 } },
+    -- Tagged with zone "The Eye" so the name-index disambiguator can tell
+    -- raid Kael apart from Magister's Terrace Kael (same name, different
+    -- instance). The MgT entry below carries the matching tag.
     ["tk_kaelthas"]     = { raidKey = "tk", name = "Kael'thas Sunstrider",
+        zone = "The Eye",
         default = { type = "phase", phase = 5 },
         yells = {
             [5] = "Forgive me my friends",              -- phase 5 burn
@@ -232,9 +237,10 @@ DB.BOSSES = {
     -- the execute / phase windows that matter in raids don't apply here.
     -- Every entry is flagged isDungeon = true so GetTriggerConfig can gate
     -- them behind the dungeonPullAlerts setting as a single on/off switch.
-    -- Magister's Terrace's Kael'thas Sunstrider is intentionally omitted:
-    -- the name collides with Tempest Keep's Kael'thas and Detection has no
-    -- zone awareness yet.
+    -- Bosses whose name collides with a raid encounter (currently only
+    -- Magister's Terrace's Kael'thas Sunstrider vs Tempest Keep's) carry
+    -- an explicit `zone` field so DB:LookupByName can disambiguate via
+    -- GetRealZoneText().
 
     -- ==================== HELLFIRE CITADEL ====================
     ["hfr_gargolmar"]   = { raidKey = "hfr",  isDungeon = true, name = "Watchkeeper Gargolmar",  default = { type = "pull" } },
@@ -324,33 +330,91 @@ DB.BOSSES = {
             [3] = "Not again! I will not be touched by you rabble",
         },
     },
+
+    -- ==================== MAGISTERS' TERRACE ====================
+    -- The Kael'thas entry collides with Tempest Keep's Kael'thas. Both
+    -- carry a `zone` tag so the name-index disambiguator can distinguish
+    -- them via GetRealZoneText() at lookup time.
+    ["mgt_selin"]       = { raidKey = "mgt",  isDungeon = true, name = "Selin Fireheart",         zone = "Magisters' Terrace", default = { type = "pull" } },
+    ["mgt_vexallus"]    = { raidKey = "mgt",  isDungeon = true, name = "Vexallus",                zone = "Magisters' Terrace", default = { type = "pull" } },
+    ["mgt_delrissa"]    = { raidKey = "mgt",  isDungeon = true, name = "Priestess Delrissa",      zone = "Magisters' Terrace", default = { type = "pull" } },
+    ["mgt_kaelthas"]    = { raidKey = "mgt",  isDungeon = true, name = "Kael'thas Sunstrider",    zone = "Magisters' Terrace", default = { type = "pull" } },
 }
 
 -- ============================================================================
 -- Name lookup cache
 -- ============================================================================
 
--- name_lower -> bossID (built lazily)
+-- name_lower -> bossID  (single match, common case)
+--               -> { { id, zone }, { id, zone }, ... }  (multi-match,
+--                    when two bosses share a name and need disambiguation
+--                    via the player's current zone — e.g. Kael'thas exists
+--                    in both Tempest Keep and Magister's Terrace)
+-- Built lazily on first lookup.
 DB._nameIndex = nil
 
 local function BuildNameIndex()
     local index = {}
+
+    local function add(key, id, zone)
+        local existing = index[key]
+        if existing == nil then
+            index[key] = id
+        elseif type(existing) == "string" then
+            -- Promote single entry to a multi-match list, capturing the
+            -- existing boss's zone tag too so disambiguation can pick it.
+            local existingBoss = DB.BOSSES[existing]
+            index[key] = {
+                { id = existing, zone = existingBoss and existingBoss.zone },
+                { id = id,       zone = zone },
+            }
+        else
+            table.insert(existing, { id = id, zone = zone })
+        end
+    end
+
     for id, boss in pairs(DB.BOSSES) do
-        index[boss.name:lower()] = id
+        add(boss.name:lower(), id, boss.zone)
         if boss.aliases then
             for _, alias in ipairs(boss.aliases) do
-                index[alias:lower()] = id
+                add(alias:lower(), id, boss.zone)
             end
         end
     end
+
     DB._nameIndex = index
 end
 
 -- Returns the bossID for a given unit name string, or nil.
-function DB:LookupByName(unitName)
+--
+-- `zoneName` is optional but strongly recommended at every callsite — it
+-- lets the lookup disambiguate when two bosses share a name (currently
+-- only "Kael'thas Sunstrider" in Tempest Keep vs Magister's Terrace).
+-- The disambiguation prefers a boss whose `zone` field matches `zoneName`
+-- case-insensitively; if none match, the first registered entry wins
+-- deterministically so detection still produces *something* sensible.
+function DB:LookupByName(unitName, zoneName)
     if not unitName then return nil end
     if not DB._nameIndex then BuildNameIndex() end
-    return DB._nameIndex[unitName:lower()]
+
+    local entry = DB._nameIndex[unitName:lower()]
+    if entry == nil then return nil end
+    if type(entry) == "string" then
+        return entry -- single match, no disambiguation needed
+    end
+
+    if zoneName and zoneName ~= "" then
+        local zlow = zoneName:lower()
+        for _, m in ipairs(entry) do
+            if m.zone and m.zone:lower() == zlow then
+                return m.id
+            end
+        end
+    end
+
+    -- Fallback: return the first registered match. Deterministic but may
+    -- be wrong; the caller should always pass a zone when one is available.
+    return entry[1].id
 end
 
 -- Returns the boss entry table for an ID.

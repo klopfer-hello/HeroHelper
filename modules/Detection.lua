@@ -59,10 +59,14 @@ function Detection:ScanUnits()
     for _, u in ipairs(SCAN_UNITS) do table.insert(units, u) end
     AddGroupTargets(units)
 
+    -- Captured once per scan: lets DB:LookupByName disambiguate name
+    -- collisions like Kael'thas (TK raid vs MgT 5-man).
+    local zone = GetRealZoneText and GetRealZoneText() or nil
+
     for _, unit in ipairs(units) do
         if UnitExists(unit) and not UnitIsDeadOrGhost(unit) and UnitCanAttack("player", unit) then
             local name = UnitName(unit)
-            local id = name and HH.Database:LookupByName(name)
+            local id = name and HH.Database:LookupByName(name, zone)
             if id then
                 self:SetCurrentBoss(id, name, unit)
                 return
@@ -107,7 +111,8 @@ function Detection:HookBigWigs()
     local ok, err = pcall(function()
         BW.RegisterMessage(HH, "BigWigs_OnBossEngage", function(_, module, diff)
             local bossName = module and (module.displayName or module.moduleName)
-            local id = bossName and HH.Database:LookupByName(bossName)
+            local zone = GetRealZoneText and GetRealZoneText() or nil
+            local id = bossName and HH.Database:LookupByName(bossName, zone)
             if id then
                 Detection:SetCurrentBoss(id, bossName)
             end
@@ -138,7 +143,8 @@ function Detection:HookDBM()
         dbm:RegisterCallback("pull", function(event, mod, delay, ...)
             local bossName = mod and (mod.combatInfo and mod.combatInfo.name or mod.localization and mod.localization.general and mod.localization.general.name)
             if not bossName and mod then bossName = mod.id end
-            local id = bossName and HH.Database:LookupByName(bossName)
+            local zone = GetRealZoneText and GetRealZoneText() or nil
+            local id = bossName and HH.Database:LookupByName(bossName, zone)
             if id then
                 Detection:SetCurrentBoss(id, bossName)
             end
