@@ -20,7 +20,7 @@ The architecture is deliberately aligned with the [FishingKit](https://github.co
 | [modules/ReminderButton.lua](modules/ReminderButton.lua) | The moveable `SecureActionButtonTemplate` that casts BL/Hero on click |
 | [modules/Minimap.lua](modules/Minimap.lua) | Self-contained minimap button (same pattern as FishingKit, no LibDBIcon) |
 | [modules/Config.lua](modules/Config.lua) | Two-tab (General / Bosses) config panel |
-| [Libs/](Libs/) | Embedded libraries: `LibStub`, `CallbackHandler-1.0`, `LibSharedMedia-3.0` |
+| [Libs/](Libs/) | Embedded libraries: `LibStub`, `CallbackHandler-1.0`, `LibSharedMedia-3.0`, `LibUIDropDownMenu-4.0` (Blizzard's `UIDropDownMenuTemplate` is tainted in TBC 2.5.5 and dropdown clicks don't register — this drop-in replacement fixes it) |
 
 ## Event Bus (HH.Events)
 
@@ -109,7 +109,7 @@ Follows **Semantic Versioning** (`MAJOR.MINOR.PATCH`):
 | New backwards-compatible features | MINOR | 1.0.x → 1.1.0 |
 | Bug fixes only | PATCH | 1.1.x → 1.1.1 |
 
-Current version: `0.1.0` (initial pre-release). Semver applies from 1.0.0 onward.
+Current version: `1.0.0` (first stable release). Semver applies going forward.
 
 ### Release Process
 

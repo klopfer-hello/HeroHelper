@@ -33,7 +33,7 @@ HeroHelper hides a big moveable button off-screen by default. When you pull a ra
 
 - **Game version**: TBC Classic Anniversary (2.5.5)
 - **Interface version**: 20505
-- **Addon version**: 0.1.0
+- **Addon version**: 1.0.0
 - **Dependencies**: none required. Integrates with **BigWigs** and **DBM** if either is installed. LibSharedMedia-3.0 is embedded.
 
 ## Installation
