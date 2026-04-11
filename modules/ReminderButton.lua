@@ -102,32 +102,43 @@ function RB:CreateButton()
     button:EnableMouse(true)
     button:Hide()
 
-    -- Icon
+    -- Icon — solid spell icon, anchored to the button. TexCoord cropping
+    -- trims the standard 8% Blizzard icon border so the artwork reaches the
+    -- edges of the button.
     local icon = button:CreateTexture(nil, "ARTWORK")
     icon:SetAllPoints(button)
-    -- Use the player's faction spell icon
     local spellID = HH.State.spellID or HH.SPELL_HEROISM
     local spellTexture = select(3, GetSpellInfo(spellID)) or "Interface\\Icons\\Spell_Nature_Bloodlust"
     icon:SetTexture(spellTexture)
     icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     button.icon = icon
 
-    -- Border (thin gold edge to separate from background)
-    local border = button:CreateTexture(nil, "OVERLAY")
-    border:SetAllPoints(button)
-    border:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
-    border:SetBlendMode("ADD")
-    border:SetVertexColor(1, 0.6, 0, 1)
-    button.border = border
-
-    -- Pulse overlay (animated via OnUpdate). We use the action button border
-    -- with ADD blend — it is guaranteed present in every client build.
-    local pulse = button:CreateTexture(nil, "OVERLAY")
-    pulse:SetPoint("CENTER", button, "CENTER")
+    -- Pulse overlay. We animate its *alpha* on OnUpdate (not scale) so that
+    -- the glow stays perfectly centered on the button at every size. The
+    -- texture is the guaranteed-present action-button border, overshooting
+    -- the button on all four sides via symmetric SetPoint offsets (applied
+    -- in ApplySize). Alpha-only animation means the alignment never drifts.
+    local pulse = button:CreateTexture(nil, "OVERLAY", nil, 1)
     pulse:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
     pulse:SetBlendMode("ADD")
-    pulse:SetVertexColor(1, 0.8, 0.2, 1)
+    pulse:SetVertexColor(1, 0.55, 0.0, 1)
     button.pulse = pulse
+
+    -- Thin orange static border so the button is visible even at the
+    -- low-alpha end of the pulse animation. Four 1 px edge textures give us
+    -- a pixel-perfect frame with zero scaling artifacts.
+    local function edge(point1, point2, horiz)
+        local t = button:CreateTexture(nil, "OVERLAY", nil, 2)
+        t:SetPoint(point1)
+        t:SetPoint(point2)
+        if horiz then t:SetHeight(2) else t:SetWidth(2) end
+        t:SetColorTexture(1, 0.49, 0.10, 1)
+        return t
+    end
+    edge("TOPLEFT",    "TOPRIGHT",    true)
+    edge("BOTTOMLEFT", "BOTTOMRIGHT", true)
+    edge("TOPLEFT",    "BOTTOMLEFT",  false)
+    edge("TOPRIGHT",   "BOTTOMRIGHT", false)
 
     -- Label (boss name beneath)
     local label = button:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
@@ -171,15 +182,14 @@ function RB:CreateButton()
     end)
     button:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-    -- Pulse animation — driven manually via OnUpdate so we have no template
-    -- dependencies on blizzard animation groups (not reliable in TBC).
+    -- Pulse animation — alpha-only modulation so the glow stays perfectly
+    -- centered on the button regardless of size.
     local elapsed = 0
     button:SetScript("OnUpdate", function(self, e)
-        if not self.pulse:IsShown() then return end
+        if not self.pulse then return end
         elapsed = elapsed + e
-        local scale = 1 + 0.15 * math.sin(elapsed * 5)
-        self.pulse:SetScale(scale)
-        self.pulse:SetAlpha(0.6 + 0.4 * math.sin(elapsed * 5))
+        local a = 0.35 + 0.35 * (1 + math.sin(elapsed * 5)) * 0.5
+        self.pulse:SetAlpha(a)
     end)
 end
 
@@ -198,9 +208,16 @@ function RB:ApplySize()
     if not button then return end
     local size = HH.chardb.settings.button.size or 40
     button:SetSize(size, size)
-    -- Pulse texture scales with button
+
+    -- Anchor the pulse to the button's four corners with a symmetric
+    -- outward offset (30% of the button size on each side). This keeps the
+    -- glow centered and proportional at every size, with no dependency on
+    -- the texture's own aspect ratio.
     if button.pulse then
-        button.pulse:SetSize(size * 1.6, size * 1.6)
+        local overshoot = math.floor(size * 0.30 + 0.5)
+        button.pulse:ClearAllPoints()
+        button.pulse:SetPoint("TOPLEFT",     button, "TOPLEFT",     -overshoot,  overshoot)
+        button.pulse:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT",  overshoot, -overshoot)
     end
 end
 

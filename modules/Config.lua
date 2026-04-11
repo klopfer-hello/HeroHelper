@@ -149,28 +149,41 @@ local function MakeSlider(parent, label, min, max, step, initial, onChange)
     fill:SetHeight(6)
     fill:SetColorTexture(D.accent[1], D.accent[2], D.accent[3], 0.9)
 
-    local function SetValue(v)
-        v = math.max(min, math.min(max, v))
-        v = math.floor(v / step + 0.5) * step
-        container.value = v
-        value:SetText(tostring(v))
+    -- Redraw the fill bar from the current container.value. Split out so
+    -- OnSizeChanged can rerun it after the caller resizes the slider (the
+    -- track width is only known once the slider has been laid out by its
+    -- parent, so we cannot bake the fill width in at construction time).
+    local function RedrawFill()
+        local v = container.value
+        if not v then return end
         local pct = (v - min) / (max - min)
         local width = track:GetWidth() * pct
         if width < 1 then width = 1 end
         fill:SetWidth(width)
-        if onChange then onChange(v) end
     end
+
+    local function SetValue(v, fireChange)
+        v = math.max(min, math.min(max, v))
+        v = math.floor(v / step + 0.5) * step
+        container.value = v
+        value:SetText(tostring(v))
+        RedrawFill()
+        if fireChange and onChange then onChange(v) end
+    end
+
+    -- Rerun layout when the track width changes (caller usually calls
+    -- :SetWidth after MakeSlider returns).
+    track:SetScript("OnSizeChanged", RedrawFill)
 
     track:EnableMouse(true)
     track:SetScript("OnMouseDown", function(self)
-        local dragging = true
         self:SetScript("OnUpdate", function(self)
             local x = GetCursorPosition() / self:GetEffectiveScale()
             local left = self:GetLeft()
             if left then
                 local pct = (x - left) / self:GetWidth()
                 pct = math.max(0, math.min(1, pct))
-                SetValue(min + pct * (max - min))
+                SetValue(min + pct * (max - min), true)
             end
             if not IsMouseButtonDown("LeftButton") then
                 self:SetScript("OnUpdate", nil)
@@ -179,7 +192,9 @@ local function MakeSlider(parent, label, min, max, step, initial, onChange)
     end)
 
     container.SetValue = SetValue
-    SetValue(initial)
+    -- Set the initial value without firing onChange, so opening the config
+    -- panel doesn't overwrite the saved value with its own current value.
+    SetValue(initial, false)
     return container
 end
 
@@ -239,6 +254,16 @@ function Config:CreateFrame()
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+
+    -- ESC closes the panel. WoW's UIParent handles any frame listed in the
+    -- global UISpecialFrames table — it calls :Hide() on each when the player
+    -- presses Escape and no higher-priority frame captures the key.
+    table.insert(UISpecialFrames, "HeroHelperConfigFrame")
+
+    -- Keep our visibility flag in sync when the frame is hidden via ESC or
+    -- via any other external mechanism.
+    frame:SetScript("OnHide", function() configState.visible = false end)
+    frame:SetScript("OnShow", function() configState.visible = true end)
 
     if frame.SetBackdrop then
         frame:SetBackdrop({
