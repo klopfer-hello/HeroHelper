@@ -523,10 +523,12 @@ function Config:BuildGeneralTab(panel)
     roleDD:SetPoint("LEFT", roleLabel, "RIGHT", 4, -2)
     y = y - ROW_HEIGHT - 6
 
-    -- Raid-chat announcement of the resolved Heroism order. Off by
-    -- default to avoid raid-chat noise; opt in for raids that want to
-    -- see who's casting before each pull.
-    local cbAnnounce = MakeCheckbox(panel, "Announce Heroism order in raid chat (once per pull)")
+    -- Raid-chat announcement of the resolved Heroism order. Posted
+    -- exactly ONCE when the group reaches the instance's expected
+    -- size (5 for 5-mans, 10 for Kara/ZA, 25 for the larger raids)
+    -- and the election locks. Silent for the rest of the run, even on
+    -- mid-fight winner changes when the primary dies.
+    local cbAnnounce = MakeCheckbox(panel, "Announce Heroism order in raid chat")
     cbAnnounce:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, y)
     cbAnnounce:HookClick(function(checked)
         HH.db.settings.announceCoordination = checked
