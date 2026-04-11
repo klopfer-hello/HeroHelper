@@ -1,52 +1,89 @@
-# HeroHelper
+## HeroHelper
 
-A TBC Classic Anniversary addon that reminds Shamans to cast **Heroism** / **Bloodlust** at the right moment on every raid boss.
+A simple TBC Classic Anniversary addon that tells Shamans **when** to cast Heroism / Bloodlust on every raid and dungeon boss.
 
-## What it does
+No more checking the spreadsheet between pulls. No more "wait, was I supposed to lust this one?". A glowing button pops up at the right moment — you click it, you cast, you keep DPS'ing.
 
-HeroHelper hides a big moveable button off-screen by default. When you pull a raid boss HeroHelper knows about, it evaluates a per-boss trigger rule (pull / HP% / phase) and pops the button up with a glow and an optional sound. You click it to cast Heroism or Bloodlust at yourself — the button uses `SecureActionButtonTemplate` so the click is a real spell cast, not a chat message. The button then fades out as soon as the cast lands or combat ends.
+![Reminder button on a boss pull](docs/screenshot-reminder.png)
+*The reminder button appears when it's time to cast. Click it to fire Heroism or Bloodlust.*
 
-## Features
+---
 
-- Covers every boss in all nine TBC raids (Karazhan → Sunwell Plateau) with sensible default triggers
-- Per-boss, per-character configuration: **Pull**, **HP %**, **Phase**, or **Off**
-- Phase detection via boss yells (phase-up events hard-coded per boss)
-- Detection hooks into **BigWigs** and **DBM** when present; falls back to scanning target / mouseover / focus / raid targets for a name match
-- Suppresses the reminder while Sated (Alliance) or Exhaustion (Horde) is on the player, or while BL/Hero is still on cooldown for you — so a second shaman can't double-trigger it
-- Movable reminder button, lockable in place, configurable size (default 40×40)
-- SharedMedia sound library for the cue
-- Minimap button (left-click options, right-click toggles the lock, drag to move)
-- **Import / export** of per-boss settings as a plain-text share string, so raid members can sync their Heroism/BL triggers
-- MIT licensed, packaged for CurseForge via `.pkgmeta`
+### What it does
 
-## Slash Commands
+- Watches every raid pull and every dungeon boss.
+- Pops a glowing, clickable button at the moment your raid wants Heroism — on the pull, at a specific HP%, when a phase starts, after a set time, or any combination.
+- Stays out of your way the rest of the time. Hidden until needed, fades out after the cast.
+- Knows about every boss in **all nine TBC raids** and **every TBC 5-man dungeon**, with researched defaults out of the box.
+- Coordinates with **other shamans in your group** so two of you don't waste a Heroism on the same pull.
 
-| Command | Description |
+---
+
+### How to use it
+
+**1. Install.** Drop the `HeroHelper` folder into `Interface/AddOns/`, or grab the latest release from CurseForge.
+
+**2. First-time setup.** Type `/hh` to open the options.
+
+![Options panel](docs/screenshot-options-general.png)
+
+- In the **General** tab, choose your sound and (if you raid with another shaman) pick your role: *Primary*, *Secondary*, *Backup*, or *Auto*.
+- Type `/hh test` once to position the reminder button on screen, drag it where you want it, then `/hh test` again to lock it in.
+
+**3. Pick your triggers.** Open the **Bosses** tab.
+
+![Bosses configuration](docs/screenshot-options-bosses.png)
+
+Each boss has a default trigger that should be sensible for most raids. You can change any of them:
+
+- **Pull** — fires the reminder the moment you engage the boss.
+- **HP %** — fires when the boss drops below a chosen HP percentage (good for execute phases).
+- **Phase** — fires when the boss enters a specific phase (only for bosses with detectable phase yells).
+- **Time** — fires a fixed number of seconds after the pull.
+- **Multi** — fires on the *first* of multiple conditions you pick (e.g. *phase 3 or HP 25% or 90 seconds in*).
+- **Off** — disable the reminder for this boss entirely.
+
+Click **Export** to copy your settings as a share string and send them to the rest of your raid. They click **Import** and you're synced.
+
+**4. Pull a boss.** When it's time, the button pops up. Click it. Done.
+
+---
+
+### Coordinating with other shamans
+
+If your raid has more than one shaman with HeroHelper, set your **role** in the General tab:
+
+- **Primary** — you're the designated Heroist; the button always pops for you first.
+- **Secondary** — the button only pops if the Primary is dead.
+- **Backup** — fires if both Primary and Secondary are dead.
+- **Auto** — no explicit role; HeroHelper picks one shaman per pull automatically.
+
+The other shamans see *"Heroism deferred to <name>"* in chat when their reminder is suppressed. If your Primary dies before the pull resolves, the Secondary's button pops automatically.
+
+---
+
+### Slash commands
+
+| Command | What it does |
 |---|---|
 | `/hh` | Open the options panel |
-| `/hh lock` / `/hh unlock` | Lock or unlock the reminder button |
-| `/hh reset` | Reset the reminder button's screen position |
-| `/hh test` | Show a test reminder (outside combat) |
-| `/hh debug` | Toggle debug output |
+| `/hh test` | Show / hide the reminder button so you can drag it into position |
+| `/hh mobtest` | Test the reminder by targeting any mob (fires when it drops below 50% HP) |
+| `/hh mobtest pull` | Test the pull-trigger flow on the next mob you engage |
+| `/hh lock` / `/hh unlock` | Lock or unlock the reminder button in place |
+| `/hh reset` | Move the reminder button back to screen center |
+| `/hh debug` | Toggle verbose chat output (for troubleshooting) |
 
-## Compatibility
+---
+
+### Compatibility
 
 - **Game version**: TBC Classic Anniversary (2.5.5)
-- **Interface version**: 20505
 - **Addon version**: 1.0.0
-- **Dependencies**: none required. Integrates with **BigWigs** and **DBM** if either is installed. LibSharedMedia-3.0 is embedded.
+- Works on its own. Plays nicely with **BigWigs** and **DBM** if you have them.
 
-## Installation
+---
 
-1. Download the latest release from CurseForge (or clone the repo into `Interface/AddOns/HeroHelper`).
-2. Launch WoW. Type `/hh` to open the options.
-3. In the **Bosses** tab, review the default triggers per raid and tweak them to your raid's strategy.
-4. The reminder button is invisible until it's time to cast — drag the placeholder during `/hh test` to position it, then lock it in place.
-
-## Acknowledgments
-
-Architecture and code style are aligned with [FishingKit](https://github.com/Klopfer-Hello/FishingKit) by For Fun Studios / Klopfer-Hello. Embedded libraries (`LibStub`, `CallbackHandler-1.0`, `LibSharedMedia-3.0`) are sourced from the BigWigs distribution.
-
-## License
+### License
 
 MIT — see [LICENSE](LICENSE).
