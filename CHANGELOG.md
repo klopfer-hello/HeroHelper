@@ -27,7 +27,15 @@ Initial release.
 - Two-tab config panel (General / Bosses) styled to match FishingKit's flat dark theme.
 - Slash commands: `/hh`, `/hh lock`, `/hh unlock`, `/hh reset`, `/hh test`, `/hh debug`.
 - Key bindings: `HEROHELPER_CONFIG`, `HEROHELPER_LOCK`, `HEROHELPER_TEST`.
+- Per-boss settings **import / export** via a plain-text `HH1|...` share string. Copy-paste in chat to share tuned trigger configs with raid members. Import silently skips unknown boss IDs.
+- Config panel closes with **ESC** (via `UISpecialFrames`).
 - MIT license. CurseForge `.pkgmeta` in repo root.
+
+### Fixes during initial development
+
+- Test button no longer casts Heroism/Bloodlust. The secure macrotext is only armed when the reminder button is locked AND not in test mode; otherwise clicks and drags are no-ops. Fresh installs default to locked so the button works out of the box.
+- Pulse glow is perfectly centered at every button size. Previously it animated via scale on a CENTER-anchored fixed-size texture, which drifted at larger sizes. Now animates alpha only on a texture anchored with symmetric SetPoint offsets recomputed in `ApplySize`.
+- Button size slider's fill bar now renders correctly for the default 40 px value. Fill width is recomputed via `OnSizeChanged` instead of being baked in at construction time.
 
 ### Files
 

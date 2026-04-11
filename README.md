@@ -16,6 +16,7 @@ HeroHelper hides a big moveable button off-screen by default. When you pull a ra
 - Movable reminder button, lockable in place, configurable size (default 40×40)
 - SharedMedia sound library for the cue
 - Minimap button (left-click options, right-click toggles the lock, drag to move)
+- **Import / export** of per-boss settings as a plain-text share string, so raid members can sync their Heroism/BL triggers
 - MIT licensed, packaged for CurseForge via `.pkgmeta`
 
 ## Slash Commands
