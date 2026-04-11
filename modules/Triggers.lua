@@ -65,13 +65,23 @@ end
 -- Per-trigger-type evaluation
 -- ============================================================================
 
--- "pull": fire as soon as we detect the pull — implemented as an immediate
--- TryFire() on BOSS_PULL for this kind.
-local function OnBossPull(bossID)
-    currentPhase = 1
-    HH.State.triggered = false
+-- Trigger evaluation that runs on EITHER BOSS_PULL or COMBAT_START.
+--
+-- Why both: the unit-scan fallback in Detection runs on TARGET_CHANGED /
+-- MOUSEOVER_CHANGED, which can fire while the player is still out of
+-- combat (e.g. tab-targeting a dungeon boss before pulling). When that
+-- happens, BOSS_PULL fires before COMBAT_START, IsReady() bails on the
+-- inCombat check, and the trigger silently misses. After combat starts,
+-- Detection:ScanUnits early-returns because currentBossID is already
+-- locked, so BOSS_PULL never re-fires — the trigger window is lost.
+--
+-- This function is idempotent: HH.State.triggered latches once we fire,
+-- so calling it twice is safe. Both BOSS_PULL and COMBAT_START call it
+-- and whichever happens second produces the actual fire.
+local function EvaluatePullTrigger()
+    if not HH.State.currentBossID then return end
 
-    local cfg = HH.Database:GetTriggerConfig(bossID)
+    local cfg = HH.Database:GetTriggerConfig(HH.State.currentBossID)
     if not cfg then return end
 
     if cfg.type == "pull" then
@@ -83,6 +93,13 @@ local function OnBossPull(bossID)
     if cfg.type == "hp" then
         T:StartHPPoll()
     end
+end
+
+-- BOSS_PULL handler. Resets per-pull state and runs the trigger evaluator.
+local function OnBossPull(bossID)
+    currentPhase = 1
+    HH.State.triggered = false
+    EvaluatePullTrigger()
 end
 
 -- "hp": poll the boss unit and fire when HP% drops below the threshold.
@@ -170,6 +187,7 @@ end
 
 local mobTest = {
     active    = false,
+    mode      = nil,    -- "hp" or "pull"
     guid      = nil,
     name      = nil,
     threshold = 50,
@@ -218,11 +236,23 @@ end
 function T:DisableMobTest(reason)
     if not mobTest.active then return end
     mobTest.active = false
+    mobTest.mode   = nil
     if mobTest.ticker then
         mobTest.ticker:Cancel()
         mobTest.ticker = nil
     end
     HH:Print("Mob test disabled" .. (reason and (": " .. reason) or "") .. ".", HH.Colors.info)
+end
+
+-- Fires the reminder for the current mobtest target. Shared by the HP-mode
+-- poll and the pull-mode COMBAT_START hook.
+local function FireMobTestReminder(reason)
+    HH:Print(("Mob test: %s — firing reminder."):format(reason), HH.Colors.success)
+    -- RB:Show reads HH.State.currentBossName for the label.
+    HH.State.currentBossName = mobTest.name
+    if HH.ReminderButton and HH.ReminderButton.Show then
+        HH.ReminderButton:Show()
+    end
 end
 
 local function PollMobTest()
@@ -246,22 +276,50 @@ local function PollMobTest()
     local pct = (UnitHealth(unit) / maxHP) * 100
 
     if pct <= mobTest.threshold then
-        HH:Print(("Mob test: %s at %d%% — firing reminder."):format(
-            mobTest.name or "target", pct), HH.Colors.success)
-        -- RB:Show reads HH.State.currentBossName for the label.
-        HH.State.currentBossName = mobTest.name
-        if HH.ReminderButton and HH.ReminderButton.Show then
-            HH.ReminderButton:Show()
-        end
+        FireMobTestReminder(("%s at %d%%"):format(mobTest.name or "target", pct))
         T:DisableMobTest()
     end
 end
 
-function T:EnableMobTest(threshold)
+-- COMBAT_START handler for pull-mode mobtest. Fires the reminder the
+-- instant the player enters combat after `/hh mobtest pull`. Independent
+-- of the BOSS_PULL pipeline, so it works on any trash mob.
+local function OnMobTestCombatStart()
+    if not mobTest.active or mobTest.mode ~= "pull" then return end
+    FireMobTestReminder("combat started (" .. (mobTest.name or "pull test") .. ")")
+    T:DisableMobTest()
+end
+
+function T:EnableMobTest(arg)
     if mobTest.active then
         T:DisableMobTest("restarting")
     end
 
+    -- Pull mode: arm a one-shot listener that fires on the next COMBAT_START.
+    -- A target is optional — if you have one we use its name as the label,
+    -- otherwise the reminder shows "Mob test pull". Useful for verifying
+    -- the pull-trigger pipeline against any trash mob without needing a
+    -- specific target acquired before pulling.
+    if arg == "pull" then
+        mobTest.active    = true
+        mobTest.mode      = "pull"
+        mobTest.guid      = nil
+        mobTest.name      = (UnitExists("target") and UnitName("target")) or "Mob test pull"
+        mobTest.expires   = GetTime() + MOBTEST_TIMEOUT
+        -- Light timeout sweeper — no per-tick polling needed in pull mode,
+        -- just a single periodic check to clean up if the player never pulls.
+        if mobTest.ticker then mobTest.ticker:Cancel() end
+        mobTest.ticker = C_Timer.NewTicker(5, function()
+            if mobTest.active and GetTime() > (mobTest.expires or 0) then
+                T:DisableMobTest("timed out after 10 minutes")
+            end
+        end)
+        HH:Print(("Mob test (pull) armed — fires on next combat start (%s)."):format(
+            mobTest.name), HH.Colors.success)
+        return true
+    end
+
+    -- HP mode (default): poll target HP until it crosses the threshold.
     if not UnitExists("target") then
         HH:Print("Mob test: no target selected. Target a mob first.", HH.Colors.warning)
         return false
@@ -275,11 +333,12 @@ function T:EnableMobTest(threshold)
         return false
     end
 
-    threshold = tonumber(threshold) or 50
+    local threshold = tonumber(arg) or 50
     if threshold < 1  then threshold = 1  end
     if threshold > 99 then threshold = 99 end
 
     mobTest.active    = true
+    mobTest.mode      = "hp"
     mobTest.guid      = UnitGUID("target")
     mobTest.name      = UnitName("target")
     mobTest.threshold = threshold
@@ -299,6 +358,14 @@ end
 function T:Initialize()
     HH.Events:On("BOSS_PULL", OnBossPull)
     HH.Events:On("BOSS_YELL", function(text, source) OnBossYell(text) end)
+    -- COMBAT_START re-runs the pull evaluator. Covers the case where the
+    -- player tab-targeted the boss before pulling — BOSS_PULL fired
+    -- pre-combat (when IsReady fails on the inCombat gate) and never re-fired
+    -- because Detection's currentBossID dedup blocks a second BOSS_PULL.
+    HH.Events:On("COMBAT_START", function()
+        EvaluatePullTrigger()
+        OnMobTestCombatStart()
+    end)
     HH.Events:On("COMBAT_END", function()
         currentPhase = 1
         HH.State.triggered = false

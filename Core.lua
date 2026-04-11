@@ -459,20 +459,24 @@ SlashCmdList["HEROHELPER"] = function(msg)
         return
     end
 
-    -- /hh mobtest [HP%] — arms the reminder button for the current target
-    -- and fires it when that mob drops below the HP threshold. Toggle off
-    -- with a second /hh mobtest (or it auto-disables on fire / 10-min
-    -- safety timeout). Intentionally command-line only — not surfaced in
-    -- the config panel.
+    -- /hh mobtest             - HP mode at 50% on current target
+    -- /hh mobtest 75          - HP mode at 75% on current target
+    -- /hh mobtest pull        - Pull mode: fires on the NEXT combat start
+    --                           (target optional; uses target name as label)
+    -- A second /hh mobtest while one is active toggles it off. Modes also
+    -- auto-disable on fire, target death, combat-end without a hit, or
+    -- the 10-minute safety timeout. Intentionally command-line only.
     if msg == "mobtest" or msg:match("^mobtest%s") then
         if HH.Triggers and HH.Triggers.IsMobTestActive and HH.Triggers:IsMobTestActive() then
             HH.Triggers:DisableMobTest()
             return
         end
-        local arg = msg:match("^mobtest%s+(%d+)$")
-        local threshold = tonumber(arg) or 50
+        local arg = msg:match("^mobtest%s+(%S+)$")
+        if arg ~= "pull" then
+            arg = tonumber(arg) or 50
+        end
         if HH.Triggers and HH.Triggers.EnableMobTest then
-            HH.Triggers:EnableMobTest(threshold)
+            HH.Triggers:EnableMobTest(arg)
         end
         return
     end
@@ -494,6 +498,7 @@ SlashCmdList["HEROHELPER"] = function(msg)
     HH:Print("  /hh lock | unlock - lock/unlock reminder button")
     HH:Print("  /hh reset       - reset button position")
     HH:Print("  /hh test        - toggle test mode (button stays visible for positioning)")
-    HH:Print("  /hh mobtest [%] - fire reminder when current target drops below HP% (default 50)")
+    HH:Print("  /hh mobtest [%]    - fire reminder when target drops below HP% (default 50)")
+    HH:Print("  /hh mobtest pull   - fire reminder on the next combat start")
     HH:Print("  /hh debug       - toggle debug output")
 end
