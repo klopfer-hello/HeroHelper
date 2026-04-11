@@ -36,6 +36,7 @@ modules\Database.lua
 # Logic
 modules\Detection.lua
 modules\Triggers.lua
+modules\Comms.lua
 
 # Interface
 modules\ReminderButton.lua

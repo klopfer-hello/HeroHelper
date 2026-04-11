@@ -482,6 +482,17 @@ function Config:BuildGeneralTab(panel)
     end)
     y = y - ROW_HEIGHT
 
+    -- Multi-shaman coordination toggle. When on, every reminder fires
+    -- through a 500ms coordination window with other HeroHelper-using
+    -- shamans in the group; alphabetically lowest name wins. See the
+    -- Comms module for the addon-message protocol.
+    local cbCoordinate = MakeCheckbox(panel, "Coordinate with other shamans (multi-Hero raids)")
+    cbCoordinate:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, y)
+    cbCoordinate:HookClick(function(checked)
+        HH.db.settings.coordinateShamans = checked
+    end)
+    y = y - ROW_HEIGHT
+
     y = y - 8
     SectionHeader("REMINDER BUTTON")
 
@@ -640,6 +651,7 @@ function Config:BuildGeneralTab(panel)
         cbEnabled:SetChecked(HH.db.settings.enabled)
         cbMinimap:SetChecked(HH.db.settings.showMinimap ~= false)
         cbDungeons:SetChecked(HH.db.settings.dungeonPullAlerts == true)
+        cbCoordinate:SetChecked(HH.db.settings.coordinateShamans ~= false)
         cbLocked:SetChecked(HH.chardb.settings.button.locked)
         cbSoundEnabled:SetChecked(HH.chardb.settings.soundEnabled)
         cbTest:SetChecked(HH.ReminderButton and HH.ReminderButton:IsTestMode() or false)

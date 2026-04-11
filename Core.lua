@@ -106,6 +106,14 @@ local defaultDB = {
         -- individual dungeon bosses can still be overridden via the
         -- Bosses config tab like raid bosses.
         dungeonPullAlerts = false,
+        -- Multi-shaman coordination over the addon-message channel. When
+        -- ON, every reminder fire goes through a 500ms grace window in
+        -- which other HeroHelper-using shamans can claim the pull; the
+        -- alphabetically lowest player name wins and the others
+        -- suppress their reminder. See modules/Comms.lua for the
+        -- protocol details. Defaults to ON because it has zero cost
+        -- when solo (no group, no broadcast, no delay).
+        coordinateShamans = true,
     },
 }
 
@@ -285,6 +293,7 @@ local function InitializeAddon()
     if HH.Database       then HH.Database:Initialize() end
     if HH.Detection      then HH.Detection:Initialize() end
     if HH.Triggers       then HH.Triggers:Initialize() end
+    if HH.Comms          then HH.Comms:Initialize() end
     if HH.ReminderButton then HH.ReminderButton:Initialize() end
     if HH.Minimap        then HH.Minimap:Initialize() end
     if HH.Config         then HH.Config:Initialize() end
@@ -328,6 +337,9 @@ local events = {
     -- Keep UI fresh on spec/cd changes
     "SPELL_UPDATE_COOLDOWN",
     "UNIT_AURA",
+
+    -- Multi-shaman coordination via addon-message channel (Comms module)
+    "CHAT_MSG_ADDON",
 }
 
 for _, event in ipairs(events) do
@@ -404,6 +416,12 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         if unit == "player" then
             HH.Events:Fire("PLAYER_AURA_CHANGED")
         end
+        return
+    end
+
+    if event == "CHAT_MSG_ADDON" then
+        -- ... = prefix, message, channel, sender, ...
+        HH.Events:Fire("CHAT_MSG_ADDON", ...)
         return
     end
 end)

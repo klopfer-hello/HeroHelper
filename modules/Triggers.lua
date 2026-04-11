@@ -84,15 +84,32 @@ local function IsReady()
 end
 
 -- Try to fire the reminder based on the trigger config for the current boss.
--- evaluateExtra is a function returning true if the current boss's trigger
--- condition evaluates positively. Each trigger type supplies its own
--- evaluateExtra via the caller in :Check().
+--
+-- The latch (HH.State.triggered = true) happens immediately so any other
+-- trigger condition that satisfies during the coordination grace window
+-- (HP poll tick, second BOSS_PULL, time timer) treats the pull as
+-- already-handled and silently no-ops on its own IsReady gate.
+--
+-- The actual reminder fire is delegated to Comms:Coordinate, which either
+-- runs the closure immediately (solo / coord disabled) or after a 500ms
+-- grace window in which other HeroHelper-using shamans can claim the pull.
+-- See modules/Comms.lua for the protocol.
 local function TryFire(reason)
     if not IsReady() then return end
 
     HH.State.triggered = true
-    HH:Debug("TRIGGER FIRED: " .. tostring(reason))
-    HH.Events:Fire("HEROHELPER_TRIGGER", HH.State.currentBossID, reason)
+    local bossID = HH.State.currentBossID
+
+    local function ActuallyFire()
+        HH:Debug("TRIGGER FIRED: " .. tostring(reason))
+        HH.Events:Fire("HEROHELPER_TRIGGER", bossID, reason)
+    end
+
+    if HH.Comms and HH.Comms.Coordinate then
+        HH.Comms:Coordinate(bossID, reason, ActuallyFire)
+    else
+        ActuallyFire()
+    end
 end
 
 -- ============================================================================
