@@ -34,6 +34,17 @@ local currentPhase = 1
 local HP_POLL_INTERVAL = 0.25
 local hpPollTicker
 
+-- One-shot timer used by the "time" trigger type. Stored so it can be
+-- canceled on COMBAT_END or when a new pull replaces the current one.
+local timeTriggerTimer = nil
+
+local function CancelTimeTrigger()
+    if timeTriggerTimer then
+        timeTriggerTimer:Cancel()
+        timeTriggerTimer = nil
+    end
+end
+
 -- ============================================================================
 -- Public check
 -- ============================================================================
@@ -93,12 +104,28 @@ local function EvaluatePullTrigger()
     if cfg.type == "hp" then
         T:StartHPPoll()
     end
+
+    -- "time": fire after a fixed delay from the first pull evaluation.
+    -- The timer is one-shot and bound to the current bossID, so a new
+    -- pull or COMBAT_END replaces / cancels it instead of double-firing.
+    if cfg.type == "time" then
+        CancelTimeTrigger()
+        local seconds    = cfg.seconds or 30
+        local pullBossID = HH.State.currentBossID
+        timeTriggerTimer = C_Timer.NewTimer(seconds, function()
+            timeTriggerTimer = nil
+            if HH.State.currentBossID == pullBossID and HH.State.inCombat then
+                TryFire("time +" .. seconds .. "s")
+            end
+        end)
+    end
 end
 
 -- BOSS_PULL handler. Resets per-pull state and runs the trigger evaluator.
 local function OnBossPull(bossID)
     currentPhase = 1
     HH.State.triggered = false
+    CancelTimeTrigger() -- new pull cancels any in-flight time trigger
     EvaluatePullTrigger()
 end
 
@@ -370,5 +397,6 @@ function T:Initialize()
         currentPhase = 1
         HH.State.triggered = false
         T:StopHPPoll()
+        CancelTimeTrigger()
     end)
 end

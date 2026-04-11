@@ -362,9 +362,10 @@ function DB:GetTriggerConfig(id)
     local cfg = {}
     for k, v in pairs(boss.default) do cfg[k] = v end
     if override then
-        if override.type  then cfg.type  = override.type  end
-        if override.hp    then cfg.hp    = override.hp    end
-        if override.phase then cfg.phase = override.phase end
+        if override.type    then cfg.type    = override.type    end
+        if override.hp      then cfg.hp      = override.hp      end
+        if override.phase   then cfg.phase   = override.phase   end
+        if override.seconds then cfg.seconds = override.seconds end
     end
     return cfg
 end
@@ -497,8 +498,9 @@ end
 local function EncodeSpec(cfg, enabled)
     if enabled == false then return "off" end
     if cfg.type == "pull"  then return "pull" end
-    if cfg.type == "hp"    and cfg.hp    then return "hp:"    .. tostring(cfg.hp)    end
-    if cfg.type == "phase" and cfg.phase then return "phase:" .. tostring(cfg.phase) end
+    if cfg.type == "hp"    and cfg.hp      then return "hp:"    .. tostring(cfg.hp)      end
+    if cfg.type == "phase" and cfg.phase   then return "phase:" .. tostring(cfg.phase)   end
+    if cfg.type == "time"  and cfg.seconds then return "time:"  .. tostring(cfg.seconds) end
     return nil
 end
 
@@ -523,6 +525,9 @@ local function ParseEntries(rest)
                 elseif kind == "phase" then
                     o.type  = "phase"
                     o.phase = math.max(1, math.min(10, tonumber(val) or 2))
+                elseif kind == "time" then
+                    o.type    = "time"
+                    o.seconds = math.max(1, math.min(600, tonumber(val) or 30))
                 else
                     o = nil
                 end

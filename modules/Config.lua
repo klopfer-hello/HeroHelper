@@ -786,14 +786,15 @@ function Config:RefreshBossList()
 
         local typeItems = {
             { label = "Pull",  value = "pull" },
-            { label = "HP %",  value = "hp" },
+            { label = "HP %",  value = "hp"   },
+            { label = "Time",  value = "time" },
         }
         if canPhase then
             table.insert(typeItems, { label = "Phase", value = "phase" })
         end
         table.insert(typeItems, { label = "Off", value = "off" })
 
-        -- HP / Phase edit box (shared slot, switched based on type)
+        -- HP / Phase / Time edit box (shared slot, switched based on type)
         local edit = CreateFrame("EditBox", nil, row)
         edit:SetSize(50, 20)
         edit:SetPoint("RIGHT", row, "RIGHT", -8, 0)
@@ -816,6 +817,9 @@ function Config:RefreshBossList()
             elseif effective.type == "phase" then
                 edit:Show()
                 edit:SetText(tostring(effective.phase or 2))
+            elseif effective.type == "time" then
+                edit:Show()
+                edit:SetText(tostring(effective.seconds or 30))
             else
                 edit:Hide()
             end
@@ -830,6 +834,8 @@ function Config:RefreshBossList()
                 override.hp = math.max(1, math.min(99, v))
             elseif effective.type == "phase" and v then
                 override.phase = math.max(1, math.min(10, v))
+            elseif effective.type == "time" and v then
+                override.seconds = math.max(1, math.min(600, v))
             end
             self:ClearFocus()
             UpdateEdit()
@@ -841,6 +847,8 @@ function Config:RefreshBossList()
             initialLabel = "HP %"
         elseif cfg.type == "phase" and canPhase then
             initialLabel = "Phase"
+        elseif cfg.type == "time" then
+            initialLabel = "Time"
         elseif cfg.type == "off" then
             initialLabel = "Off"
         end
@@ -858,8 +866,9 @@ function Config:RefreshBossList()
             else
                 override.enabled = true
                 override.type = value
-                if value == "hp"    and not override.hp    then override.hp    = boss.default.hp    or 35 end
-                if value == "phase" and not override.phase then override.phase = boss.default.phase or 2 end
+                if value == "hp"    and not override.hp      then override.hp      = boss.default.hp      or 35 end
+                if value == "phase" and not override.phase   then override.phase   = boss.default.phase   or 2  end
+                if value == "time"  and not override.seconds then override.seconds = boss.default.seconds or 30 end
             end
             UpdateEdit()
         end, initialLabel)
