@@ -86,36 +86,42 @@ end
 -- BigWigs integration
 -- ============================================================================
 
--- BigWigs broadcasts module-level "OnBossEngage" etc. messages via its loader
--- callback registry. We hook both the loader (BigWigsLoader) and the core
--- (BigWigs itself) because TBC BigWigs routes engage messages through
--- different handlers depending on version.
+-- BigWigs broadcasts module-level "BigWigs_OnBossEngage" / "_OnBossDisable"
+-- messages via a CallbackHandler-1.0 registry embedded on BigWigs (or the
+-- loader). CallbackHandler's RegisterMessage signature is:
+--
+--     registry.RegisterMessage(subscriber, messageName, handler)
+--
+-- where `subscriber` is any unique identifier owned by the *subscriber*, not
+-- the broadcaster. Calling it via method syntax (`BW:RegisterMessage(...)`)
+-- passes BW itself as the subscriber and BigWigs refuses it with:
+--
+--   "attempted to register a function to BigWigsLoader, you might be using
+--    : instead of . to register the callback."
+--
+-- We use dot syntax and pass our own addon namespace (HH) as the subscriber.
 function Detection:HookBigWigs()
     local BW = _G.BigWigs or _G.BigWigsLoader
-    if not BW then return false end
+    if not BW or type(BW.RegisterMessage) ~= "function" then return false end
 
-    -- BigWigs exposes a RegisterMessage method on its addon object
-    if type(BW.RegisterMessage) == "function" then
-        local ok, err = pcall(function()
-            BW:RegisterMessage("BigWigs_OnBossEngage", function(_, module, diff)
-                local bossName = module and (module.displayName or module.moduleName)
-                local id = bossName and HH.Database:LookupByName(bossName)
-                if id then
-                    Detection:SetCurrentBoss(id, bossName)
-                end
-            end)
-            BW:RegisterMessage("BigWigs_OnBossDisable", function(_, module)
-                HH.State.currentBossID   = nil
-                HH.State.currentBossName = nil
-            end)
+    local ok, err = pcall(function()
+        BW.RegisterMessage(HH, "BigWigs_OnBossEngage", function(_, module, diff)
+            local bossName = module and (module.displayName or module.moduleName)
+            local id = bossName and HH.Database:LookupByName(bossName)
+            if id then
+                Detection:SetCurrentBoss(id, bossName)
+            end
         end)
-        if ok then
-            HH:Debug("BigWigs engage hook installed")
-            return true
-        else
-            HH:Debug("BigWigs hook failed: " .. tostring(err))
-        end
+        BW.RegisterMessage(HH, "BigWigs_OnBossDisable", function(_, module)
+            HH.State.currentBossID   = nil
+            HH.State.currentBossName = nil
+        end)
+    end)
+    if ok then
+        HH:Debug("BigWigs engage hook installed")
+        return true
     end
+    HH:Debug("BigWigs hook failed: " .. tostring(err))
     return false
 end
 
