@@ -126,6 +126,8 @@ end
 -- ============================================================================
 
 function RB:Initialize()
+    if not HH.State.isShaman then return end
+
     RegisterSounds()
     self:CreateButton()
     self:ApplyPosition()
