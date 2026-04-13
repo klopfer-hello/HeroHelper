@@ -83,7 +83,7 @@ The other shamans see *"Heroism deferred to <name>"* in chat when their reminder
 ### Compatibility
 
 - **Game version**: TBC Classic Anniversary (2.5.5)
-- **Addon version**: 1.1.2
+- **Addon version**: 1.2.0
 - Works on its own. Plays nicely with **BigWigs** and **DBM** if you have them.
 
 ---

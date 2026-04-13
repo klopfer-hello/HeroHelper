@@ -1,5 +1,24 @@
 # HeroHelper - TBC Anniversary Edition - Changelog
 
+## v1.2.0
+
+### New
+
+- **"Skip" trigger type** — per-boss option to intentionally suppress
+  the reminder while keeping detection active. Useful for dungeon
+  bosses where you want to save Hero/BL for a later boss (e.g.
+  Thorngrin the Tender in Botanica, which now defaults to Skip).
+  Available in the config dropdown and supported by export/import.
+
+### Fixed
+
+- Dungeon bosses no longer false-trigger when pulling trash nearby.
+  The unit-scan fallback now requires `UnitAffectingCombat` for
+  dungeon bosses before locking in a detection.
+- Added an in-combat rescan ticker (0.5s) that covers chained pulls
+  where the player engages a boss without leaving combat from prior
+  trash. Self-cancels once a boss is found or combat ends.
+
 ## v1.1.2
 
 ### Fixed
