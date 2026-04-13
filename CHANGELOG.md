@@ -1,5 +1,20 @@
 # HeroHelper - TBC Anniversary Edition - Changelog
 
+## v1.1.1
+
+### Fixed
+
+- Removed `Bindings.xml` from the TOC file list — WoW auto-loads this
+  file for key bindings; listing it in the TOC caused the regular XML
+  parser to reject the `<Bindings>` schema, producing 7 XML warnings
+  on every load.
+
+### Internal
+
+- Extracted `Detection:GetScanUnits()` to eliminate three copies of
+  the unit-list builder (in `ScanUnits`, `GetCurrentBossHPPct`, and
+  `Triggers:FindUnitByGUID`).
+
 ## v1.1.0
 
 Major feature release: full TBC dungeon coverage, multi-shaman
