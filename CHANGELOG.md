@@ -1,5 +1,16 @@
 # HeroHelper - TBC Anniversary Edition - Changelog
 
+## v1.1.2
+
+### Fixed
+
+- Non-shaman players with HeroHelper installed no longer join the
+  coordination roster. Previously a non-shaman could win the election
+  and suppress the real shaman's reminder entirely.
+- The ReminderButton frame is no longer created for non-shaman classes,
+  removing the invisible but mouse-interactive area that remained on
+  screen.
+
 ## v1.1.1
 
 ### Fixed
