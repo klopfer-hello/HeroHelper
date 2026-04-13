@@ -389,6 +389,8 @@ end
 -- ============================================================================
 
 local function BroadcastHello()
+    if not HH.State.isShaman then return end
+
     local channel = GetGroupChannel()
     if not channel then return end
 
