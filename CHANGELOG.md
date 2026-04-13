@@ -1,5 +1,19 @@
 # HeroHelper - TBC Anniversary Edition - Changelog
 
+## v1.2.1
+
+### Changed
+
+- Boss lists in the config panel are now sorted in **kill order**
+  (matching AtlasLoot encounter order) instead of alphabetically.
+  Affects Zul'Aman (Akil'zon before Nalorakk) and Black Temple
+  (Bloodboil → RoS → Teron Gorefiend) most notably.
+
+### Fixed
+
+- Botanica default skip trigger moved from Thorngrin the Tender to
+  Laj (Laj is the throwaway boss you skip Hero on, not Thorngrin).
+
 ## v1.2.0
 
 ### New

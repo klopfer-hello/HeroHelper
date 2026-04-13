@@ -66,6 +66,41 @@ DB.RAIDS = {
 }
 
 -- ============================================================================
+-- Kill order (used by IterRaid to list bosses in encounter order)
+-- ============================================================================
+
+DB.KILL_ORDER = {
+    -- Raids
+    kara  = { "kara_attumen", "kara_moroes", "kara_maiden", "kara_opera", "kara_curator", "kara_terestian", "kara_shade", "kara_netherspite", "kara_chess", "kara_prince", "kara_nightbane" },
+    gruul = { "gruul_maulgar", "gruul_gruul" },
+    mag   = { "mag_magtheridon" },
+    ssc   = { "ssc_hydross", "ssc_lurker", "ssc_leotheras", "ssc_flk", "ssc_morogrim", "ssc_vashj" },
+    tk    = { "tk_alar", "tk_vr", "tk_solarian", "tk_kaelthas" },
+    za    = { "za_akilzon", "za_nalorakk", "za_jan", "za_halazzi", "za_hexlord", "za_zuljin" },
+    hyjal = { "hyjal_rage", "hyjal_anetheron", "hyjal_kazrogal", "hyjal_azgalor", "hyjal_archimonde" },
+    bt    = { "bt_njentus", "bt_supremus", "bt_akama", "bt_bloodboil", "bt_ros", "bt_teron", "bt_mother", "bt_council", "bt_illidan" },
+    swp   = { "swp_kalecgos", "swp_brutallus", "swp_felmyst", "swp_eredar", "swp_muru", "swp_kiljaeden" },
+
+    -- 5-man dungeons
+    hfr  = { "hfr_gargolmar", "hfr_omor", "hfr_vazruden" },
+    bf   = { "bf_maker", "bf_broggok", "bf_kelidan" },
+    sh   = { "sh_nethekurse", "sh_omrogg", "sh_kargath" },
+    sp   = { "sp_mennu", "sp_rokmar", "sp_quagmirran" },
+    ub   = { "ub_hungarfen", "ub_ghazan", "ub_muselek", "ub_blackstalker" },
+    sv   = { "sv_thespia", "sv_steamrigger", "sv_kalithresh" },
+    mt   = { "mt_pandemonius", "mt_tavarok", "mt_shaffar" },
+    ac   = { "ac_shirrak", "ac_maladaar" },
+    seth = { "seth_syth", "seth_ikiss" },
+    slab = { "slab_hellmaw", "slab_blackheart", "slab_vorpil", "slab_murmur" },
+    ohf  = { "ohf_drake", "ohf_skarloc", "ohf_epoch" },
+    bm   = { "bm_deja", "bm_temporus", "bm_aeonus" },
+    mech = { "mech_gyro", "mech_ironhand", "mech_capacitus", "mech_sepethrea", "mech_pathaleon" },
+    bot  = { "bot_sarannis", "bot_freywinn", "bot_thorngrin", "bot_laj", "bot_warpsplinter" },
+    arc  = { "arc_zereketh", "arc_dalliah", "arc_soccothrates", "arc_skyriss" },
+    mgt  = { "mgt_selin", "mgt_vexallus", "mgt_delrissa", "mgt_kaelthas" },
+}
+
+-- ============================================================================
 -- Boss table
 -- ============================================================================
 -- Default triggers are picked from common Shaman raid practice:
@@ -167,8 +202,8 @@ DB.BOSSES = {
     },
 
     -- ==================== ZUL'AMAN ====================
-    ["za_nalorakk"]     = { raidKey = "za", name = "Nalorakk",                                          default = { type = "pull" } },
     ["za_akilzon"]      = { raidKey = "za", name = "Akil'zon",                                          default = { type = "pull" } },
+    ["za_nalorakk"]     = { raidKey = "za", name = "Nalorakk",                                          default = { type = "pull" } },
     ["za_jan"]          = { raidKey = "za", name = "Jan'alai",                                          default = { type = "hp", hp = 35 } },
     ["za_halazzi"]      = { raidKey = "za", name = "Halazzi",                                           default = { type = "phase", phase = 2 }, yells = { [2] = "Totem will crush you!" } },
     -- Hex Lord's abilities (Spirit Bolts, Drain Power) only get nastier as
@@ -200,9 +235,9 @@ DB.BOSSES = {
     -- up with the burn window after it first takes damage so the reminder
     -- fires during the actual DPS phase rather than the channeling setup.
     ["bt_akama"]        = { raidKey = "bt", name = "Shade of Akama",                                    default = { type = "hp", hp = 35 } },
-    ["bt_teron"]        = { raidKey = "bt", name = "Teron Gorefiend",                                   default = { type = "pull" } },
     ["bt_bloodboil"]    = { raidKey = "bt", name = "Gurtogg Bloodboil",                                 default = { type = "hp", hp = 25 } },
     ["bt_ros"]          = { raidKey = "bt", name = "Reliquary of Souls",                                default = { type = "phase", phase = 3 }, yells = { [3] = "I will not be denied" } },
+    ["bt_teron"]        = { raidKey = "bt", name = "Teron Gorefiend",                                   default = { type = "pull" } },
     ["bt_mother"]       = { raidKey = "bt", name = "Mother Shahraz",                                    default = { type = "pull" } },
     ["bt_council"]      = { raidKey = "bt", name = "Illidari Council",                                  default = { type = "pull" } },
     ["bt_illidan"]      = { raidKey = "bt", name = "Illidan Stormrage",
@@ -313,8 +348,8 @@ DB.BOSSES = {
 
     ["bot_sarannis"]    = { raidKey = "bot",  isDungeon = true, name = "Commander Sarannis",      default = { type = "pull" } },
     ["bot_freywinn"]    = { raidKey = "bot",  isDungeon = true, name = "High Botanist Freywinn",  default = { type = "pull" } },
-    ["bot_thorngrin"]   = { raidKey = "bot",  isDungeon = true, name = "Thorngrin the Tender",    default = { type = "skip" } },
-    ["bot_laj"]         = { raidKey = "bot",  isDungeon = true, name = "Laj",                     default = { type = "pull" } },
+    ["bot_thorngrin"]   = { raidKey = "bot",  isDungeon = true, name = "Thorngrin the Tender",    default = { type = "pull" } },
+    ["bot_laj"]         = { raidKey = "bot",  isDungeon = true, name = "Laj",                     default = { type = "skip" } },
     ["bot_warpsplinter"]= { raidKey = "bot",  isDungeon = true, name = "Warp Splinter",           default = { type = "pull" } },
 
     ["arc_zereketh"]    = { raidKey = "arc",  isDungeon = true, name = "Zereketh the Unbound",    default = { type = "pull" } },
@@ -462,8 +497,18 @@ function DB:GetTriggerConfig(id)
     return cfg
 end
 
--- Iterator over all bosses in a raid, sorted by declaration order.
+-- Iterator over all bosses in a raid, in kill order.
 function DB:IterRaid(raidKey)
+    local order = DB.KILL_ORDER[raidKey]
+    if order then
+        local i = 0
+        return function()
+            i = i + 1
+            local id = order[i]
+            if id then return id, DB.BOSSES[id] end
+        end
+    end
+    -- Fallback for unknown raids: collect from BOSSES and sort by name.
     local list = {}
     for id, boss in pairs(DB.BOSSES) do
         if boss.raidKey == raidKey then

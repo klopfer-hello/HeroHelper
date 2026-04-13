@@ -112,7 +112,7 @@ Follows **Semantic Versioning** (`MAJOR.MINOR.PATCH`):
 | New backwards-compatible features | MINOR | 1.0.x → 1.1.0 |
 | Bug fixes only | PATCH | 1.1.x → 1.1.1 |
 
-Current version: `1.2.0` (skip trigger type, dungeon false-trigger fix, in-combat rescan ticker, multi-shaman coordination, dungeon support, compound triggers, time triggers, zone-aware lookup). Semver applies going forward.
+Current version: `1.2.1` (kill-order boss lists, skip trigger type, dungeon false-trigger fix, in-combat rescan ticker, multi-shaman coordination, dungeon support, compound triggers, time triggers, zone-aware lookup). Semver applies going forward.
 
 ### Release Process
 
