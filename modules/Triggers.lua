@@ -124,6 +124,7 @@ end
 -- silent no-ops via the latch.
 local function ArmCondition(cond)
     if not cond or not cond.type then return end
+    if cond.type == "skip" then return end
 
     if cond.type == "pull" then
         TryFire("pull")

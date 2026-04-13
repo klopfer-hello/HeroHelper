@@ -850,6 +850,7 @@ function Config:RefreshBossList()
         if canPhase then
             table.insert(typeItems, { label = "Phase", value = "phase" })
         end
+        table.insert(typeItems, { label = "Skip",  value = "skip" })
         table.insert(typeItems, { label = "Multi", value = "any" })
         table.insert(typeItems, { label = "Off",   value = "off" })
 
@@ -943,6 +944,8 @@ function Config:RefreshBossList()
             initialLabel = "Phase"
         elseif cfg.type == "time" then
             initialLabel = "Time"
+        elseif cfg.type == "skip" then
+            initialLabel = "Skip"
         elseif cfg.type == "any" then
             initialLabel = "Multi"
         elseif cfg.type == "off" then

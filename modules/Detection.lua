@@ -76,8 +76,17 @@ function Detection:ScanUnits()
             local name = UnitName(unit)
             local id = name and HH.Database:LookupByName(name, zone)
             if id then
-                self:SetCurrentBoss(id, name, unit)
-                return
+                -- Dungeon bosses require the unit to be in combat before we
+                -- lock in. Without this check, pulling trash near an idle
+                -- dungeon boss causes a false BOSS_PULL because the scan
+                -- picks up the nearby boss via raid/party targets.
+                local boss = HH.Database:Get(id)
+                if boss and boss.isDungeon and not UnitAffectingCombat(unit) then
+                    -- Skip: boss is in the database but not yet engaged.
+                else
+                    self:SetCurrentBoss(id, name, unit)
+                    return
+                end
             end
         end
     end
@@ -196,6 +205,36 @@ function Detection:GetCurrentBossHPPct()
 end
 
 -- ============================================================================
+-- In-combat rescan ticker
+-- ============================================================================
+--
+-- Covers the chained-pull scenario: the player is already in combat (from
+-- trash) and engages a boss without generating a TARGET_CHANGED or
+-- MOUSEOVER_CHANGED event. A lightweight periodic scan fills the gap until
+-- a boss is identified or combat ends.
+
+local RESCAN_INTERVAL = 0.5   -- seconds between scans
+local rescanTicker
+
+local function StartRescanTicker()
+    if rescanTicker then return end
+    rescanTicker = C_Timer.NewTicker(RESCAN_INTERVAL, function()
+        if HH.State.currentBossID or not HH.State.inCombat then
+            if rescanTicker then rescanTicker:Cancel(); rescanTicker = nil end
+            return
+        end
+        Detection:ScanUnits()
+    end)
+end
+
+local function StopRescanTicker()
+    if rescanTicker then
+        rescanTicker:Cancel()
+        rescanTicker = nil
+    end
+end
+
+-- ============================================================================
 -- Initialization
 -- ============================================================================
 
@@ -203,7 +242,13 @@ function Detection:Initialize()
     -- Unit scan fallback
     HH.Events:On("TARGET_CHANGED",    function() Detection:ScanUnits() end)
     HH.Events:On("MOUSEOVER_CHANGED", function() Detection:ScanUnits() end)
-    HH.Events:On("COMBAT_START",      function() Detection:ScanUnits() end)
+    HH.Events:On("COMBAT_START",      function()
+        Detection:ScanUnits()
+        if not HH.State.currentBossID then
+            StartRescanTicker()
+        end
+    end)
+    HH.Events:On("COMBAT_END", function() StopRescanTicker() end)
 
     -- Boss mod hookup is deferred: their addons may load after ours.
     HH.Events:On("PLAYER_ENTERING_WORLD", function()

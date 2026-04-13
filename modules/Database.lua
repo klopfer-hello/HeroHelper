@@ -313,7 +313,7 @@ DB.BOSSES = {
 
     ["bot_sarannis"]    = { raidKey = "bot",  isDungeon = true, name = "Commander Sarannis",      default = { type = "pull" } },
     ["bot_freywinn"]    = { raidKey = "bot",  isDungeon = true, name = "High Botanist Freywinn",  default = { type = "pull" } },
-    ["bot_thorngrin"]   = { raidKey = "bot",  isDungeon = true, name = "Thorngrin the Tender",    default = { type = "pull" } },
+    ["bot_thorngrin"]   = { raidKey = "bot",  isDungeon = true, name = "Thorngrin the Tender",    default = { type = "skip" } },
     ["bot_laj"]         = { raidKey = "bot",  isDungeon = true, name = "Laj",                     default = { type = "pull" } },
     ["bot_warpsplinter"]= { raidKey = "bot",  isDungeon = true, name = "Warp Splinter",           default = { type = "pull" } },
 
@@ -590,6 +590,7 @@ end
 local function EncodeSpec(cfg, enabled)
     if enabled == false then return "off" end
     if cfg.type == "pull"  then return "pull" end
+    if cfg.type == "skip"  then return "skip" end
     if cfg.type == "hp"    and cfg.hp      then return "hp:"    .. tostring(cfg.hp)      end
     if cfg.type == "phase" and cfg.phase   then return "phase:" .. tostring(cfg.phase)   end
     if cfg.type == "time"  and cfg.seconds then return "time:"  .. tostring(cfg.seconds) end
@@ -638,6 +639,8 @@ local function ParseEntries(rest)
             local o = { enabled = true }
             if spec == "pull" then
                 o.type = "pull"
+            elseif spec == "skip" then
+                o.type = "skip"
             elseif spec == "off" then
                 o.enabled = false
             else
