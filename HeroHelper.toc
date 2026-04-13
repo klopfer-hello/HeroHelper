@@ -28,7 +28,6 @@ Libs\LibUIDropDownMenu\LibUIDropDownMenu.xml
 
 # Core
 Core.lua
-Bindings.xml
 
 # Data
 modules\Database.lua
