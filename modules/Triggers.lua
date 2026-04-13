@@ -287,32 +287,11 @@ local mobTest = {
 local MOBTEST_POLL_INTERVAL = 0.25
 local MOBTEST_TIMEOUT       = 600   -- seconds (10 minutes)
 
--- Candidate unit tokens to check each tick for a GUID match.
-local MOBTEST_SCAN_UNITS = {
-    "target", "focus", "mouseover",
-    "boss1", "boss2", "boss3", "boss4", "boss5",
-}
-
 local function FindUnitByGUID(guid)
     if not guid then return nil end
-    for _, unit in ipairs(MOBTEST_SCAN_UNITS) do
+    for _, unit in ipairs(HH.Detection:GetScanUnits()) do
         if UnitExists(unit) and UnitGUID(unit) == guid then
             return unit
-        end
-    end
-    -- Group-target scan — supports both the TBC and modern group APIs.
-    local raidN = (GetNumRaidMembers and GetNumRaidMembers()) or 0
-    if raidN > 0 or (IsInRaid and IsInRaid()) then
-        local n = math.max(raidN, (GetNumGroupMembers and GetNumGroupMembers()) or 0)
-        for i = 1, n do
-            local u = "raid" .. i .. "target"
-            if UnitExists(u) and UnitGUID(u) == guid then return u end
-        end
-    else
-        local partyN = (GetNumPartyMembers and GetNumPartyMembers()) or 0
-        for i = 1, partyN do
-            local u = "party" .. i .. "target"
-            if UnitExists(u) and UnitGUID(u) == guid then return u end
         end
     end
     return nil

@@ -30,22 +30,32 @@ local SCAN_UNITS = {
     "boss1", "boss2", "boss3", "boss4", "boss5",
 }
 
--- party/raid targets are added dynamically per scan (indexed by group size).
+-- ============================================================================
+-- Shared unit-list builder
+-- ============================================================================
+
+-- Returns a fresh list of every unit token worth scanning: the static core
+-- set (target, focus, mouseover, boss1..5) plus dynamic raid/party targets.
 -- Supports both the modern (GetNumGroupMembers/IsInRaid) and legacy
 -- (GetNumRaidMembers/GetNumPartyMembers) APIs so the code is robust across
 -- TBC Anniversary client revisions.
-local function AddGroupTargets(list)
-    local raidN  = (GetNumRaidMembers and GetNumRaidMembers()) or 0
+--
+-- Used by ScanUnits(), GetCurrentBossHPPct(), and Triggers:FindUnitByGUID().
+function Detection:GetScanUnits()
+    local units = {}
+    for _, u in ipairs(SCAN_UNITS) do units[#units + 1] = u end
+
+    local raidN = (GetNumRaidMembers and GetNumRaidMembers()) or 0
     if raidN > 0 or (IsInRaid and IsInRaid()) then
-        for i = 1, math.max(raidN, (GetNumGroupMembers and GetNumGroupMembers()) or 0) do
-            table.insert(list, "raid" .. i .. "target")
-        end
-        return
+        local n = math.max(raidN, (GetNumGroupMembers and GetNumGroupMembers()) or 0)
+        for i = 1, n do units[#units + 1] = "raid" .. i .. "target" end
+        return units
     end
-    local partyN = (GetNumPartyMembers and GetNumPartyMembers()) or ((GetNumGroupMembers and GetNumGroupMembers()) or 0)
-    for i = 1, partyN do
-        table.insert(list, "party" .. i .. "target")
-    end
+
+    local partyN = (GetNumPartyMembers and GetNumPartyMembers())
+              or ((GetNumGroupMembers and GetNumGroupMembers()) or 0)
+    for i = 1, partyN do units[#units + 1] = "party" .. i .. "target" end
+    return units
 end
 
 -- ============================================================================
@@ -55,9 +65,7 @@ end
 function Detection:ScanUnits()
     if HH.State.currentBossID then return end -- already locked in
 
-    local units = {}
-    for _, u in ipairs(SCAN_UNITS) do table.insert(units, u) end
-    AddGroupTargets(units)
+    local units = self:GetScanUnits()
 
     -- Captured once per scan: lets DB:LookupByName disambiguate name
     -- collisions like Kael'thas (TK raid vs MgT 5-man).
@@ -174,9 +182,7 @@ function Detection:GetCurrentBossHPPct()
     if not HH.State.currentBossID then return nil end
     local wantName = HH.State.currentBossName
 
-    local units = {}
-    for _, u in ipairs(SCAN_UNITS) do table.insert(units, u) end
-    AddGroupTargets(units)
+    local units = self:GetScanUnits()
 
     for _, unit in ipairs(units) do
         if UnitExists(unit) and UnitName(unit) == wantName and not UnitIsDeadOrGhost(unit) then
