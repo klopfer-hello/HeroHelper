@@ -149,14 +149,14 @@ DB.BOSSES = {
     ["kara_prince"]     = { raidKey = "kara", npcIds = { 15690 },        name = "Prince Malchezaar",
         default = { type = "phase", phase = 2 },
         yells = {
-            [2] = { "All will be laid to waste" },         -- infernal phase begins
-            [3] = { "Not enough!" },                       -- phase 3
+            [2] = { "All will be laid to waste" },         -- infernal phase begins  TODO: deDE
+            [3] = { "Not enough!" },                       -- phase 3               TODO: deDE
         },
     },
     ["kara_nightbane"]  = { raidKey = "kara", npcIds = { 17225 },        name = "Nightbane", aliases = { "Nightbane (Raid)" },
         default = { type = "phase", phase = 2 },
         yells = {
-            [2] = { "Fleshlings, your time has come" },    -- ground phase
+            [2] = { "Fleshlings, your time has come" },    -- ground phase           TODO: deDE
         },
     },
 
@@ -168,14 +168,14 @@ DB.BOSSES = {
     ["mag_magtheridon"] = { raidKey = "mag",  npcIds = { 17257 },        name = "Magtheridon",
         default = { type = "phase", phase = 3 },
         yells = {
-            [3] = { "I am... unleashed!" },                 -- phase 3 / breakout burn
+            [3] = { "I am... unleashed!", "Ich... bin... frei!" }, -- phase 3 / breakout burn
         },
     },
 
     -- ==================== SERPENTSHRINE CAVERN ====================
     ["ssc_hydross"]     = { raidKey = "ssc", npcIds = { 21216 },        name = "Hydross the Unstable",                             default = { type = "pull" } },
     ["ssc_lurker"]      = { raidKey = "ssc", npcIds = { 21217 },        name = "The Lurker Below",                                 default = { type = "pull" } },
-    ["ssc_leotheras"]   = { raidKey = "ssc", npcIds = { 21215 },        name = "Leotheras the Blind",                              default = { type = "phase", phase = 2 }, yells = { [2] = { "Now you will feel true pain" } } },
+    ["ssc_leotheras"]   = { raidKey = "ssc", npcIds = { 21215 },        name = "Leotheras the Blind",                              default = { type = "phase", phase = 2 }, yells = { [2] = { "Now you will feel true pain" } } }, -- TODO: deDE
     ["ssc_flk"]         = { raidKey = "ssc", npcIds = { 21214 },        name = "Fathom-Lord Karathress",                           default = { type = "hp", hp = 35 } },
     -- Morogrim spawns murloc adds at 50% and 25%. Popping BL at 25% after
     -- the second wave is handled lets the raid burn him down before another
@@ -184,14 +184,14 @@ DB.BOSSES = {
     ["ssc_vashj"]       = { raidKey = "ssc", npcIds = { 21212 },        name = "Lady Vashj",
         default = { type = "phase", phase = 3 },
         yells = {
-            [3] = { "I have waited long enough" },          -- phase 3 adds
+            [3] = { "I have waited long enough", "Geht besser in Deckung" }, -- phase 3 (deDE: DBM alternate yell)
         },
     },
 
     -- ==================== TEMPEST KEEP (THE EYE) ====================
     ["tk_alar"]         = { raidKey = "tk", npcIds = { 19514 },          name = "Al'ar",
         default = { type = "phase", phase = 2 },
-        yells = { [2] = { "Burn" } },                        -- phase 2 trigger
+        yells = { [2] = { "Burn" } },                        -- phase 2 trigger       TODO: deDE
     },
     ["tk_vr"]           = { raidKey = "tk", npcIds = { 19516 },          name = "Void Reaver",                                       default = { type = "pull" } },
     ["tk_solarian"]     = { raidKey = "tk", npcIds = { 18805 },          name = "High Astromancer Solarian",                         default = { type = "hp", hp = 20 } },
@@ -202,7 +202,7 @@ DB.BOSSES = {
         instanceId = 550,
         default = { type = "phase", phase = 5 },
         yells = {
-            [5] = { "Forgive me my friends" },              -- phase 5 burn
+            [5] = { "Forgive me my friends", "Ich bin nicht so weit gekommen" }, -- phase 5 (deDE: DBM alternate yell)
         },
     },
 
@@ -210,7 +210,7 @@ DB.BOSSES = {
     ["za_akilzon"]      = { raidKey = "za", npcIds = { 23574 },          name = "Akil'zon",                                          default = { type = "pull" } },
     ["za_nalorakk"]     = { raidKey = "za", npcIds = { 23576 },          name = "Nalorakk",                                          default = { type = "pull" } },
     ["za_jan"]          = { raidKey = "za", npcIds = { 23578 },          name = "Jan'alai",                                          default = { type = "hp", hp = 35 } },
-    ["za_halazzi"]      = { raidKey = "za", npcIds = { 23577 },          name = "Halazzi",                                           default = { type = "phase", phase = 2 }, yells = { [2] = { "Totem will crush you!" } } },
+    ["za_halazzi"]      = { raidKey = "za", npcIds = { 23577 },          name = "Halazzi",                                           default = { type = "phase", phase = 2 }, yells = { [2] = { "Totem will crush you!", "Ich kämpfe mit wildem Geist" } } }, -- deDE: DBM alternate yell
     -- Hex Lord's abilities (Spirit Bolts, Drain Power) only get nastier as
     -- the fight drags on. Pulling with BL skips an entire Spirit Bolts cycle
     -- and is the standard community call for the timed-chest run.
@@ -218,10 +218,10 @@ DB.BOSSES = {
     ["za_zuljin"]       = { raidKey = "za", npcIds = { 23863 },          name = "Zul'jin",
         default = { type = "phase", phase = 5 },
         yells = {
-            [2] = { "Bear spirit, hear me!" },
-            [3] = { "Eagle spirit, lend me your wings!" },
-            [4] = { "Lynx spirit, come to me!" },
-            [5] = { "Dragonhawk, guide my hand!" },
+            [2] = { "Bear spirit, hear me!", "Sagt 'Hallo' zu Bruder Bär" },                         -- deDE: DBM alternate yell
+            [3] = { "Eagle spirit, lend me your wings!", "Niemand versteckt sich vor dem Adler" },   -- deDE: DBM alternate yell
+            [4] = { "Lynx spirit, come to me!", "Lernt meine Brüder kennen: Reißzahn und Klaue" },  -- deDE: DBM alternate yell
+            [5] = { "Dragonhawk, guide my hand!", "Der Drachenfalke steht schon vor Euch" },         -- deDE: DBM alternate yell
         },
     },
 
@@ -241,32 +241,32 @@ DB.BOSSES = {
     -- fires during the actual DPS phase rather than the channeling setup.
     ["bt_akama"]        = { raidKey = "bt", npcIds = { 22841 },          name = "Shade of Akama",                                    default = { type = "hp", hp = 35 } },
     ["bt_bloodboil"]    = { raidKey = "bt", npcIds = { 22948 },          name = "Gurtogg Bloodboil",                                 default = { type = "hp", hp = 25 } },
-    ["bt_ros"]          = { raidKey = "bt", npcIds = { 23420 },          name = "Reliquary of Souls", aliases = { "Essence of Souls" }, default = { type = "phase", phase = 3 }, yells = { [3] = { "I will not be denied" } } },
+    ["bt_ros"]          = { raidKey = "bt", npcIds = { 23420 },          name = "Reliquary of Souls", aliases = { "Essence of Souls" }, default = { type = "phase", phase = 3 }, yells = { [3] = { "I will not be denied" } } }, -- TODO: deDE
     ["bt_teron"]        = { raidKey = "bt", npcIds = { 22871 },          name = "Teron Gorefiend",                                   default = { type = "pull" } },
     ["bt_mother"]       = { raidKey = "bt", npcIds = { 22947 },          name = "Mother Shahraz",                                    default = { type = "pull" } },
     ["bt_council"]      = { raidKey = "bt", npcIds = { 22949, 22950, 22951, 22952 }, name = "Illidari Council",                      default = { type = "pull" } },
     ["bt_illidan"]      = { raidKey = "bt", npcIds = { 22917 },          name = "Illidan Stormrage",
         default = { type = "phase", phase = 5 },
         yells = {
-            [2] = { "Behold the flames of Azzinoth" },      -- phase 2
-            [3] = { "I will not be touched by rabble" },    -- phase 3 demon
-            [4] = { "You have come a long way" },           -- phase 4
-            [5] = { "You are not prepared" },               -- final phase
+            [2] = { "Behold the flames of Azzinoth" },                                         -- phase 2        TODO: deDE
+            [3] = { "I will not be touched by rabble", "Erzittert vor der Macht des Dämonen" }, -- phase 3 demon (deDE: DBM alternate yell)
+            [4] = { "You have come a long way", "War's das schon, Sterbliche" },                -- phase 4       (deDE: DBM alternate yell)
+            [5] = { "You are not prepared" },                                                    -- final phase    TODO: deDE
         },
     },
 
     -- ==================== SUNWELL PLATEAU ====================
     ["swp_kalecgos"]    = { raidKey = "swp", npcIds = { 24850 },         name = "Kalecgos",                                         default = { type = "pull" } },
     ["swp_brutallus"]   = { raidKey = "swp", npcIds = { 24882 },         name = "Brutallus",                                        default = { type = "pull" } },
-    ["swp_felmyst"]     = { raidKey = "swp", npcIds = { 25038 },         name = "Felmyst",                                          default = { type = "phase", phase = 2 }, yells = { [2] = { "Choke on your final breath" } } },
+    ["swp_felmyst"]     = { raidKey = "swp", npcIds = { 25038 },         name = "Felmyst",                                          default = { type = "phase", phase = 2 }, yells = { [2] = { "Choke on your final breath", "Ich bin stärker als je zuvor" } } }, -- deDE: DBM alternate yell
     ["swp_eredar"]      = { raidKey = "swp", npcIds = { 25165, 25166 },  name = "Eredar Twins", aliases = { "Grand Warlock Alythess", "Lady Sacrolash" }, default = { type = "hp", hp = 25 } },
     ["swp_muru"]        = { raidKey = "swp", npcIds = { 25741 },         name = "M'uru",                                            default = { type = "phase", phase = 2 } },
     ["swp_kiljaeden"]   = { raidKey = "swp", npcIds = { 25315 },         name = "Kil'jaeden",
         default = { type = "phase", phase = 4 },
         yells = {
-            [2] = { "I am the hand of Sargeras" },
-            [3] = { "Do not hold back" },
-            [4] = { "Unleash the fury" },                    -- final burn phase
+            [2] = { "I am the hand of Sargeras" },              -- TODO: deDE
+            [3] = { "Do not hold back" },                    -- TODO: deDE
+            [4] = { "Unleash the fury" },                    -- final burn phase  TODO: deDE
         },
     },
 
@@ -366,8 +366,8 @@ DB.BOSSES = {
     ["arc_skyriss"]     = { raidKey = "arc",  isDungeon = true, npcIds = { 20912 },  name = "Harbinger Skyriss",
         default = { type = "phase", phase = 2 },
         yells = {
-            [2] = { "I'll rip the flesh from your bones" },
-            [3] = { "Not again! I will not be touched by you rabble" },
+            [2] = { "I'll rip the flesh from your bones" },                  -- TODO: deDE
+            [3] = { "Not again! I will not be touched by you rabble" },   -- TODO: deDE
         },
     },
 
