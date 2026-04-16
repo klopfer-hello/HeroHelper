@@ -147,16 +147,22 @@ DB.BOSSES = {
     ["kara_netherspite"]= { raidKey = "kara", npcIds = { 15689 },        name = "Netherspite",                                     default = { type = "pull" } },
     ["kara_chess"]      = { raidKey = "kara", npcIds = { 21752, 21684 }, name = "Chess Event",                                     default = { type = "pull" } },
     ["kara_prince"]     = { raidKey = "kara", npcIds = { 15690 },        name = "Prince Malchezaar",
-        default = { type = "phase", phase = 2 },
+        default = { type = "hp", hp = 30 },
         yells = {
-            [2] = { "All will be laid to waste" },         -- infernal phase begins  TODO: deDE
-            [3] = { "Not enough!" },                       -- phase 3               TODO: deDE
+            [2] = { "All will be laid to waste",                         -- infernal phase begins
+                    "Time is the fire in which you'll burn",             -- canonical P2 yell
+                    "Zeit ist das Feuer, in dem Ihr brennen werdet" },   -- deDE
+            [3] = { "Not enough!",                                       -- phase 3
+                    "How can you hope to stand against such overwhelming power", -- canonical P3 yell
+                    "einer so überwältigenden Macht gewachsen" },        -- deDE (substring)
         },
     },
     ["kara_nightbane"]  = { raidKey = "kara", npcIds = { 17225 },        name = "Nightbane", aliases = { "Nightbane (Raid)" },
         default = { type = "phase", phase = 2 },
         yells = {
-            [2] = { "Fleshlings, your time has come" },    -- ground phase           TODO: deDE
+            [2] = { "Fleshlings, your time has come",                             -- ground phase
+                    "Genug! Ich werde landen",                                    -- deDE landing yell
+                    "Insekten! Lasst mich Euch meine Kraft" },                    -- deDE alternate landing yell
         },
     },
 
@@ -175,7 +181,7 @@ DB.BOSSES = {
     -- ==================== SERPENTSHRINE CAVERN ====================
     ["ssc_hydross"]     = { raidKey = "ssc", npcIds = { 21216 },        name = "Hydross the Unstable",                             default = { type = "pull" } },
     ["ssc_lurker"]      = { raidKey = "ssc", npcIds = { 21217 },        name = "The Lurker Below",                                 default = { type = "pull" } },
-    ["ssc_leotheras"]   = { raidKey = "ssc", npcIds = { 21215 },        name = "Leotheras the Blind",                              default = { type = "phase", phase = 2 }, yells = { [2] = { "Now you will feel true pain" } } }, -- TODO: deDE
+    ["ssc_leotheras"]   = { raidKey = "ssc", npcIds = { 21215 },        name = "Leotheras the Blind",                              default = { type = "phase", phase = 2 }, yells = { [2] = { "Now you will feel true pain", "Hinfort, unbedeutender Elf" } } }, -- deDE: demon form yell
     ["ssc_flk"]         = { raidKey = "ssc", npcIds = { 21214 },        name = "Fathom-Lord Karathress",                           default = { type = "hp", hp = 35 } },
     -- Morogrim spawns murloc adds at 50% and 25%. Popping BL at 25% after
     -- the second wave is handled lets the raid burn him down before another
