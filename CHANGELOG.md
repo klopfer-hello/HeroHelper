@@ -1,5 +1,43 @@
 # HeroHelper - TBC Anniversary Edition - Changelog
 
+## v1.3.0
+
+### New
+
+- **Locale-independent boss detection** — every boss is now identified by
+  NPC creature ID (from GUID) instead of name strings. The addon works on
+  non-English clients (German, French, etc.) without requiring localized
+  boss name databases.
+- **Multi-string yell patterns** — phase detection yells now support
+  multiple strings per phase, so translations can be added alongside the
+  English pattern. Any match advances the phase.
+- **German (deDE) yell patterns** — added German translations for most
+  phase-triggered bosses sourced from DBM localization data and Wowhead
+  TBC quote pages.
+
+### Fixed
+
+- **DBM integration completely broken** — the callback event names were
+  wrong (`"pull"` instead of `"DBM_Pull"`, etc.), silently preventing DBM
+  from ever triggering boss detection. Fixed for all three callbacks.
+- **Out-of-combat BL/Hero misfire** — added `[combat]` guard to the
+  secure macrotext so accidental clicks on the invisible button between
+  pulls don't burn the cooldown.
+- **DBM boss name mismatches** — added missing aliases for Opera Event
+  (`"Romulo and Julianne"`, `"Wizard of Oz"`), Nightbane (`"Nightbane
+  (Raid)"`), and Reliquary of Souls (`"Essence of Souls"`).
+
+### Changed
+
+- Zone-based disambiguation (Kael'thas TK vs MgT) now uses numeric
+  `instanceId` from `GetInstanceInfo()` instead of locale-dependent
+  `GetRealZoneText()` strings.
+- DBM hook uses `mod.combatInfo.mob` (creature ID) as the primary
+  lookup, falling back to name. BigWigs hook tries `module.creatureId`
+  first similarly.
+- HP polling (`GetCurrentBossHPPct`) matches units by NPC ID from GUID
+  instead of display name.
+
 ## v1.2.1
 
 ### Changed
