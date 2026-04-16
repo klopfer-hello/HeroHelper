@@ -370,6 +370,12 @@ end
 -- test mode. When unlocked, clicks must be no-ops so the user can freely
 -- left-click-drag the button without accidentally burning BL/Hero. The same
 -- applies to TestShow(): a preview must never fire the spell.
+--
+-- The default macro uses the [combat] conditional so that clicks on the
+-- invisible button outside of combat are harmless no-ops. The container
+-- stays permanently :Show()'d (alpha-toggled) so the SecureActionButton
+-- always captures clicks at its saved position — without [combat], an
+-- accidental click there between pulls would burn BL/Hero.
 function RB:ApplyMacrotext()
     if not button then return end
     if InCombatLockdown() then return end
@@ -383,7 +389,7 @@ function RB:ApplyMacrotext()
         if override and override ~= "" then
             text = override
         else
-            text = "/cast [@player] " .. HH.State.spellName
+            text = "/cast [combat,@player] " .. HH.State.spellName
         end
     else
         -- Empty macrotext = click does nothing. Using "" rather than nil so
