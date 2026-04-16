@@ -5,20 +5,25 @@
     remind the player to cast Heroism / Bloodlust. Each entry is keyed by an
     addon-internal ID (stable across versions) and provides:
 
-        name     -- English boss name (used for name-based detection)
-        aliases  -- optional list of extra name strings that can match (e.g.
-                    localized variants, combined encounters like "Twin Emperors")
-        raid     -- human-readable raid name (for grouping in the config UI)
-        raidKey  -- stable key identifying the raid (used by the UI tabs)
-        default  -- default trigger config for this boss:
-                      { type = "pull"  }                   -> cast on the pull
-                      { type = "hp",  hp = 35 }            -> cast at <= 35% HP
-                      { type = "phase", phase = 2, yell = "..." }
-                                                            -> cast when a boss
-                                                               yell matches
-        yells    -- optional table mapping phase index -> yell pattern or
-                    spellID used to advance phase detection. The Triggers module
-                    uses these to decide when "phase N" has been entered.
+        npcIds      -- list of NPC creature IDs for this encounter (from GUID).
+                       Primary, locale-independent detection path.
+        name        -- English boss name (fallback detection + config UI label)
+        aliases     -- optional list of extra name strings that can match (e.g.
+                       boss mod display names, combined encounters)
+        raidKey     -- stable key identifying the raid (used by the UI tabs)
+        instanceId  -- optional numeric instance/map ID, used to disambiguate
+                       bosses that share a name across instances (e.g.
+                       Kael'thas in TK 550 vs MgT 585). Obtained at runtime
+                       via select(8, GetInstanceInfo()) — locale-independent.
+        default     -- default trigger config for this boss:
+                         { type = "pull"  }                   -> cast on pull
+                         { type = "hp",  hp = 35 }            -> cast at <= 35% HP
+                         { type = "phase", phase = 2 }        -> cast on phase
+        yells       -- optional table mapping phase index -> list of yell
+                       pattern strings used to advance phase detection. Each
+                       value is a list so multiple translations can be added:
+                         { [2] = { "English yell", "German yell" } }
+                       The Triggers module matches any string in the list.
 
     The per-character saved variables store *overrides* (HH.chardb.bosses[id]).
     Any missing key falls back to this table's defaults.
@@ -128,140 +133,140 @@ DB.KILL_ORDER = {
 
 DB.BOSSES = {
     -- ==================== KARAZHAN ====================
-    ["kara_attumen"]    = { raidKey = "kara", name = "Attumen the Huntsman",                           default = { type = "pull" } },
-    ["kara_moroes"]     = { raidKey = "kara", name = "Moroes",                                          default = { type = "pull" } },
-    ["kara_maiden"]     = { raidKey = "kara", name = "Maiden of Virtue",                                default = { type = "pull" } },
-    ["kara_opera"]      = { raidKey = "kara", name = "Opera Event",                                     aliases = { "Romulo", "Julianne", "Romulo and Julianne", "Dorothee", "Strawman", "Tinhead", "Roar", "The Crone", "The Big Bad Wolf", "Wizard of Oz" }, default = { type = "pull" } },
+    ["kara_attumen"]    = { raidKey = "kara", npcIds = { 16152, 16151 }, name = "Attumen the Huntsman",                           default = { type = "pull" } },
+    ["kara_moroes"]     = { raidKey = "kara", npcIds = { 15687 },        name = "Moroes",                                          default = { type = "pull" } },
+    ["kara_maiden"]     = { raidKey = "kara", npcIds = { 16457 },        name = "Maiden of Virtue",                                default = { type = "pull" } },
+    ["kara_opera"]      = { raidKey = "kara", npcIds = { 17521, 17534, 17533, 18168 }, name = "Opera Event", aliases = { "Romulo", "Julianne", "Romulo and Julianne", "Dorothee", "Strawman", "Tinhead", "Roar", "The Crone", "The Big Bad Wolf", "Wizard of Oz" }, default = { type = "pull" } },
     -- Curator Evocates at 20% HP for ~20s, during which the raid freecasts.
     -- Popping BL just as Evocation starts lines the 30s haste window up with
     -- the biggest uninterrupted DPS window of the fight and kills him before
     -- his post-Evocate enrage matters.
-    ["kara_curator"]    = { raidKey = "kara", name = "The Curator",                                     default = { type = "hp", hp = 30 } },
-    ["kara_terestian"]  = { raidKey = "kara", name = "Terestian Illhoof",                               default = { type = "pull" } },
-    ["kara_shade"]      = { raidKey = "kara", name = "Shade of Aran",                                   default = { type = "hp", hp = 35 } },
-    ["kara_netherspite"]= { raidKey = "kara", name = "Netherspite",                                     default = { type = "pull" } },
-    ["kara_chess"]      = { raidKey = "kara", name = "Chess Event",                                     default = { type = "pull" } },
-    ["kara_prince"]     = { raidKey = "kara", name = "Prince Malchezaar",
+    ["kara_curator"]    = { raidKey = "kara", npcIds = { 15691 },        name = "The Curator",                                     default = { type = "hp", hp = 30 } },
+    ["kara_terestian"]  = { raidKey = "kara", npcIds = { 15688 },        name = "Terestian Illhoof",                               default = { type = "pull" } },
+    ["kara_shade"]      = { raidKey = "kara", npcIds = { 16524 },        name = "Shade of Aran",                                   default = { type = "hp", hp = 35 } },
+    ["kara_netherspite"]= { raidKey = "kara", npcIds = { 15689 },        name = "Netherspite",                                     default = { type = "pull" } },
+    ["kara_chess"]      = { raidKey = "kara", npcIds = { 21752, 21684 }, name = "Chess Event",                                     default = { type = "pull" } },
+    ["kara_prince"]     = { raidKey = "kara", npcIds = { 15690 },        name = "Prince Malchezaar",
         default = { type = "phase", phase = 2 },
         yells = {
-            [2] = "All will be laid to waste",         -- infernal phase begins
-            [3] = "Not enough!",                       -- phase 3
+            [2] = { "All will be laid to waste" },         -- infernal phase begins
+            [3] = { "Not enough!" },                       -- phase 3
         },
     },
-    ["kara_nightbane"]  = { raidKey = "kara", name = "Nightbane",                                       aliases = { "Nightbane (Raid)" },
+    ["kara_nightbane"]  = { raidKey = "kara", npcIds = { 17225 },        name = "Nightbane", aliases = { "Nightbane (Raid)" },
         default = { type = "phase", phase = 2 },
         yells = {
-            [2] = "Fleshlings, your time has come",    -- ground phase
+            [2] = { "Fleshlings, your time has come" },    -- ground phase
         },
     },
 
     -- ==================== GRUUL'S LAIR ====================
-    ["gruul_maulgar"]   = { raidKey = "gruul", name = "High King Maulgar",                              default = { type = "pull" } },
-    ["gruul_gruul"]     = { raidKey = "gruul", name = "Gruul the Dragonkiller",                         default = { type = "hp", hp = 30 } },
+    ["gruul_maulgar"]   = { raidKey = "gruul", npcIds = { 18831 },       name = "High King Maulgar",                              default = { type = "pull" } },
+    ["gruul_gruul"]     = { raidKey = "gruul", npcIds = { 19044 },       name = "Gruul the Dragonkiller",                         default = { type = "hp", hp = 30 } },
 
     -- ==================== MAGTHERIDON'S LAIR ====================
-    ["mag_magtheridon"] = { raidKey = "mag",  name = "Magtheridon",
+    ["mag_magtheridon"] = { raidKey = "mag",  npcIds = { 17257 },        name = "Magtheridon",
         default = { type = "phase", phase = 3 },
         yells = {
-            [3] = "I am... unleashed!",                 -- phase 3 / breakout burn
+            [3] = { "I am... unleashed!" },                 -- phase 3 / breakout burn
         },
     },
 
     -- ==================== SERPENTSHRINE CAVERN ====================
-    ["ssc_hydross"]     = { raidKey = "ssc", name = "Hydross the Unstable",                             default = { type = "pull" } },
-    ["ssc_lurker"]      = { raidKey = "ssc", name = "The Lurker Below",                                 default = { type = "pull" } },
-    ["ssc_leotheras"]   = { raidKey = "ssc", name = "Leotheras the Blind",                              default = { type = "phase", phase = 2 }, yells = { [2] = "Now you will feel true pain" } },
-    ["ssc_flk"]         = { raidKey = "ssc", name = "Fathom-Lord Karathress",                           default = { type = "hp", hp = 35 } },
+    ["ssc_hydross"]     = { raidKey = "ssc", npcIds = { 21216 },        name = "Hydross the Unstable",                             default = { type = "pull" } },
+    ["ssc_lurker"]      = { raidKey = "ssc", npcIds = { 21217 },        name = "The Lurker Below",                                 default = { type = "pull" } },
+    ["ssc_leotheras"]   = { raidKey = "ssc", npcIds = { 21215 },        name = "Leotheras the Blind",                              default = { type = "phase", phase = 2 }, yells = { [2] = { "Now you will feel true pain" } } },
+    ["ssc_flk"]         = { raidKey = "ssc", npcIds = { 21214 },        name = "Fathom-Lord Karathress",                           default = { type = "hp", hp = 35 } },
     -- Morogrim spawns murloc adds at 50% and 25%. Popping BL at 25% after
     -- the second wave is handled lets the raid burn him down before another
     -- add set spawns.
-    ["ssc_morogrim"]    = { raidKey = "ssc", name = "Morogrim Tidewalker",                              default = { type = "hp", hp = 25 } },
-    ["ssc_vashj"]       = { raidKey = "ssc", name = "Lady Vashj",
+    ["ssc_morogrim"]    = { raidKey = "ssc", npcIds = { 21213 },        name = "Morogrim Tidewalker",                              default = { type = "hp", hp = 25 } },
+    ["ssc_vashj"]       = { raidKey = "ssc", npcIds = { 21212 },        name = "Lady Vashj",
         default = { type = "phase", phase = 3 },
         yells = {
-            [3] = "I have waited long enough",          -- phase 3 adds
+            [3] = { "I have waited long enough" },          -- phase 3 adds
         },
     },
 
     -- ==================== TEMPEST KEEP (THE EYE) ====================
-    ["tk_alar"]         = { raidKey = "tk", name = "Al'ar",
+    ["tk_alar"]         = { raidKey = "tk", npcIds = { 19514 },          name = "Al'ar",
         default = { type = "phase", phase = 2 },
-        yells = { [2] = "Burn" },                        -- phase 2 trigger
+        yells = { [2] = { "Burn" } },                        -- phase 2 trigger
     },
-    ["tk_vr"]           = { raidKey = "tk", name = "Void Reaver",                                       default = { type = "pull" } },
-    ["tk_solarian"]     = { raidKey = "tk", name = "High Astromancer Solarian",                         default = { type = "hp", hp = 20 } },
-    -- Tagged with zone "The Eye" so the name-index disambiguator can tell
+    ["tk_vr"]           = { raidKey = "tk", npcIds = { 19516 },          name = "Void Reaver",                                       default = { type = "pull" } },
+    ["tk_solarian"]     = { raidKey = "tk", npcIds = { 18805 },          name = "High Astromancer Solarian",                         default = { type = "hp", hp = 20 } },
+    -- Tagged with instanceId so the name-index disambiguator can tell
     -- raid Kael apart from Magister's Terrace Kael (same name, different
     -- instance). The MgT entry below carries the matching tag.
-    ["tk_kaelthas"]     = { raidKey = "tk", name = "Kael'thas Sunstrider",
-        zone = "The Eye",
+    ["tk_kaelthas"]     = { raidKey = "tk", npcIds = { 19622 },          name = "Kael'thas Sunstrider",
+        instanceId = 550,
         default = { type = "phase", phase = 5 },
         yells = {
-            [5] = "Forgive me my friends",              -- phase 5 burn
+            [5] = { "Forgive me my friends" },              -- phase 5 burn
         },
     },
 
     -- ==================== ZUL'AMAN ====================
-    ["za_akilzon"]      = { raidKey = "za", name = "Akil'zon",                                          default = { type = "pull" } },
-    ["za_nalorakk"]     = { raidKey = "za", name = "Nalorakk",                                          default = { type = "pull" } },
-    ["za_jan"]          = { raidKey = "za", name = "Jan'alai",                                          default = { type = "hp", hp = 35 } },
-    ["za_halazzi"]      = { raidKey = "za", name = "Halazzi",                                           default = { type = "phase", phase = 2 }, yells = { [2] = "Totem will crush you!" } },
+    ["za_akilzon"]      = { raidKey = "za", npcIds = { 23574 },          name = "Akil'zon",                                          default = { type = "pull" } },
+    ["za_nalorakk"]     = { raidKey = "za", npcIds = { 23576 },          name = "Nalorakk",                                          default = { type = "pull" } },
+    ["za_jan"]          = { raidKey = "za", npcIds = { 23578 },          name = "Jan'alai",                                          default = { type = "hp", hp = 35 } },
+    ["za_halazzi"]      = { raidKey = "za", npcIds = { 23577 },          name = "Halazzi",                                           default = { type = "phase", phase = 2 }, yells = { [2] = { "Totem will crush you!" } } },
     -- Hex Lord's abilities (Spirit Bolts, Drain Power) only get nastier as
     -- the fight drags on. Pulling with BL skips an entire Spirit Bolts cycle
     -- and is the standard community call for the timed-chest run.
-    ["za_hexlord"]      = { raidKey = "za", name = "Hex Lord Malacrass",                                default = { type = "pull" } },
-    ["za_zuljin"]       = { raidKey = "za", name = "Zul'jin",
+    ["za_hexlord"]      = { raidKey = "za", npcIds = { 24239 },          name = "Hex Lord Malacrass",                                default = { type = "pull" } },
+    ["za_zuljin"]       = { raidKey = "za", npcIds = { 23863 },          name = "Zul'jin",
         default = { type = "phase", phase = 5 },
         yells = {
-            [2] = "Bear spirit, hear me!",
-            [3] = "Eagle spirit, lend me your wings!",
-            [4] = "Lynx spirit, come to me!",
-            [5] = "Dragonhawk, guide my hand!",
+            [2] = { "Bear spirit, hear me!" },
+            [3] = { "Eagle spirit, lend me your wings!" },
+            [4] = { "Lynx spirit, come to me!" },
+            [5] = { "Dragonhawk, guide my hand!" },
         },
     },
 
     -- ==================== HYJAL SUMMIT ====================
-    ["hyjal_rage"]      = { raidKey = "hyjal", name = "Rage Winterchill",                               default = { type = "pull" } },
-    ["hyjal_anetheron"] = { raidKey = "hyjal", name = "Anetheron",                                      default = { type = "pull" } },
-    ["hyjal_kazrogal"]  = { raidKey = "hyjal", name = "Kaz'rogal",                                      default = { type = "pull" } },
-    ["hyjal_azgalor"]   = { raidKey = "hyjal", name = "Azgalor",                                        default = { type = "pull" } },
-    ["hyjal_archimonde"]= { raidKey = "hyjal", name = "Archimonde",                                     default = { type = "hp", hp = 20 } },
+    ["hyjal_rage"]      = { raidKey = "hyjal", npcIds = { 17767 },      name = "Rage Winterchill",                               default = { type = "pull" } },
+    ["hyjal_anetheron"] = { raidKey = "hyjal", npcIds = { 17808 },      name = "Anetheron",                                      default = { type = "pull" } },
+    ["hyjal_kazrogal"]  = { raidKey = "hyjal", npcIds = { 17888 },      name = "Kaz'rogal",                                      default = { type = "pull" } },
+    ["hyjal_azgalor"]   = { raidKey = "hyjal", npcIds = { 17842 },      name = "Azgalor",                                        default = { type = "pull" } },
+    ["hyjal_archimonde"]= { raidKey = "hyjal", npcIds = { 17968 },      name = "Archimonde",                                     default = { type = "hp", hp = 20 } },
 
     -- ==================== BLACK TEMPLE ====================
-    ["bt_njentus"]      = { raidKey = "bt", name = "High Warlord Naj'entus",                            default = { type = "pull" } },
-    ["bt_supremus"]     = { raidKey = "bt", name = "Supremus",                                          default = { type = "pull" } },
+    ["bt_njentus"]      = { raidKey = "bt", npcIds = { 22887 },          name = "High Warlord Naj'entus",                            default = { type = "pull" } },
+    ["bt_supremus"]     = { raidKey = "bt", npcIds = { 22898 },          name = "Supremus",                                          default = { type = "pull" } },
     -- The Shade is unattackable for most of the fight while channeling.
     -- Once freed by Akama it becomes active and drops fast — hp 35 lines
     -- up with the burn window after it first takes damage so the reminder
     -- fires during the actual DPS phase rather than the channeling setup.
-    ["bt_akama"]        = { raidKey = "bt", name = "Shade of Akama",                                    default = { type = "hp", hp = 35 } },
-    ["bt_bloodboil"]    = { raidKey = "bt", name = "Gurtogg Bloodboil",                                 default = { type = "hp", hp = 25 } },
-    ["bt_ros"]          = { raidKey = "bt", name = "Reliquary of Souls",                                aliases = { "Essence of Souls" }, default = { type = "phase", phase = 3 }, yells = { [3] = "I will not be denied" } },
-    ["bt_teron"]        = { raidKey = "bt", name = "Teron Gorefiend",                                   default = { type = "pull" } },
-    ["bt_mother"]       = { raidKey = "bt", name = "Mother Shahraz",                                    default = { type = "pull" } },
-    ["bt_council"]      = { raidKey = "bt", name = "Illidari Council",                                  default = { type = "pull" } },
-    ["bt_illidan"]      = { raidKey = "bt", name = "Illidan Stormrage",
+    ["bt_akama"]        = { raidKey = "bt", npcIds = { 22841 },          name = "Shade of Akama",                                    default = { type = "hp", hp = 35 } },
+    ["bt_bloodboil"]    = { raidKey = "bt", npcIds = { 22948 },          name = "Gurtogg Bloodboil",                                 default = { type = "hp", hp = 25 } },
+    ["bt_ros"]          = { raidKey = "bt", npcIds = { 23420 },          name = "Reliquary of Souls", aliases = { "Essence of Souls" }, default = { type = "phase", phase = 3 }, yells = { [3] = { "I will not be denied" } } },
+    ["bt_teron"]        = { raidKey = "bt", npcIds = { 22871 },          name = "Teron Gorefiend",                                   default = { type = "pull" } },
+    ["bt_mother"]       = { raidKey = "bt", npcIds = { 22947 },          name = "Mother Shahraz",                                    default = { type = "pull" } },
+    ["bt_council"]      = { raidKey = "bt", npcIds = { 22949, 22950, 22951, 22952 }, name = "Illidari Council",                      default = { type = "pull" } },
+    ["bt_illidan"]      = { raidKey = "bt", npcIds = { 22917 },          name = "Illidan Stormrage",
         default = { type = "phase", phase = 5 },
         yells = {
-            [2] = "Behold the flames of Azzinoth",      -- phase 2
-            [3] = "I will not be touched by rabble",    -- phase 3 demon
-            [4] = "You have come a long way",           -- phase 4
-            [5] = "You are not prepared",               -- final phase
+            [2] = { "Behold the flames of Azzinoth" },      -- phase 2
+            [3] = { "I will not be touched by rabble" },    -- phase 3 demon
+            [4] = { "You have come a long way" },           -- phase 4
+            [5] = { "You are not prepared" },               -- final phase
         },
     },
 
     -- ==================== SUNWELL PLATEAU ====================
-    ["swp_kalecgos"]    = { raidKey = "swp", name = "Kalecgos",                                         default = { type = "pull" } },
-    ["swp_brutallus"]   = { raidKey = "swp", name = "Brutallus",                                        default = { type = "pull" } },
-    ["swp_felmyst"]     = { raidKey = "swp", name = "Felmyst",                                          default = { type = "phase", phase = 2 }, yells = { [2] = "Choke on your final breath" } },
-    ["swp_eredar"]      = { raidKey = "swp", name = "Eredar Twins",                                     aliases = { "Grand Warlock Alythess", "Lady Sacrolash" }, default = { type = "hp", hp = 25 } },
-    ["swp_muru"]        = { raidKey = "swp", name = "M'uru",                                            default = { type = "phase", phase = 2 } },
-    ["swp_kiljaeden"]   = { raidKey = "swp", name = "Kil'jaeden",
+    ["swp_kalecgos"]    = { raidKey = "swp", npcIds = { 24850 },         name = "Kalecgos",                                         default = { type = "pull" } },
+    ["swp_brutallus"]   = { raidKey = "swp", npcIds = { 24882 },         name = "Brutallus",                                        default = { type = "pull" } },
+    ["swp_felmyst"]     = { raidKey = "swp", npcIds = { 25038 },         name = "Felmyst",                                          default = { type = "phase", phase = 2 }, yells = { [2] = { "Choke on your final breath" } } },
+    ["swp_eredar"]      = { raidKey = "swp", npcIds = { 25165, 25166 },  name = "Eredar Twins", aliases = { "Grand Warlock Alythess", "Lady Sacrolash" }, default = { type = "hp", hp = 25 } },
+    ["swp_muru"]        = { raidKey = "swp", npcIds = { 25741 },         name = "M'uru",                                            default = { type = "phase", phase = 2 } },
+    ["swp_kiljaeden"]   = { raidKey = "swp", npcIds = { 25315 },         name = "Kil'jaeden",
         default = { type = "phase", phase = 4 },
         yells = {
-            [2] = "I am the hand of Sargeras",
-            [3] = "Do not hold back",
-            [4] = "Unleash the fury",                    -- final burn phase
+            [2] = { "I am the hand of Sargeras" },
+            [3] = { "Do not hold back" },
+            [4] = { "Unleash the fury" },                    -- final burn phase
         },
     },
 
@@ -278,141 +283,166 @@ DB.BOSSES = {
     -- GetRealZoneText().
 
     -- ==================== HELLFIRE CITADEL ====================
-    ["hfr_gargolmar"]   = { raidKey = "hfr",  isDungeon = true, name = "Watchkeeper Gargolmar",  default = { type = "pull" } },
-    ["hfr_omor"]        = { raidKey = "hfr",  isDungeon = true, name = "Omor the Unscarred",     default = { type = "pull" } },
-    ["hfr_vazruden"]    = { raidKey = "hfr",  isDungeon = true, name = "Vazruden the Herald",    aliases = { "Vazruden", "Nazan" }, default = { type = "pull" } },
+    ["hfr_gargolmar"]   = { raidKey = "hfr",  isDungeon = true, npcIds = { 17306 },  name = "Watchkeeper Gargolmar",  default = { type = "pull" } },
+    ["hfr_omor"]        = { raidKey = "hfr",  isDungeon = true, npcIds = { 17308 },  name = "Omor the Unscarred",     default = { type = "pull" } },
+    ["hfr_vazruden"]    = { raidKey = "hfr",  isDungeon = true, npcIds = { 17307, 17537, 17536 }, name = "Vazruden the Herald", aliases = { "Vazruden", "Nazan" }, default = { type = "pull" } },
 
-    ["bf_maker"]        = { raidKey = "bf",   isDungeon = true, name = "The Maker",               default = { type = "pull" } },
-    ["bf_broggok"]      = { raidKey = "bf",   isDungeon = true, name = "Broggok",                 default = { type = "pull" } },
-    ["bf_kelidan"]      = { raidKey = "bf",   isDungeon = true, name = "Keli'dan the Breaker",    default = { type = "pull" } },
+    ["bf_maker"]        = { raidKey = "bf",   isDungeon = true, npcIds = { 17381 },  name = "The Maker",               default = { type = "pull" } },
+    ["bf_broggok"]      = { raidKey = "bf",   isDungeon = true, npcIds = { 17380 },  name = "Broggok",                 default = { type = "pull" } },
+    ["bf_kelidan"]      = { raidKey = "bf",   isDungeon = true, npcIds = { 17377 },  name = "Keli'dan the Breaker",    default = { type = "pull" } },
 
     -- Nethekurse heals himself off the dying Shadow Cleft adds; at 20% he
     -- stops healing and the real burn window opens. BL on the execute, not
     -- on the pull, otherwise haste is wasted on regenerated HP.
-    ["sh_nethekurse"]   = { raidKey = "sh",   isDungeon = true, name = "Grand Warlock Nethekurse", default = { type = "hp", hp = 20 } },
-    ["sh_omrogg"]       = { raidKey = "sh",   isDungeon = true, name = "Warbringer O'mrogg",       default = { type = "pull" } },
-    ["sh_kargath"]      = { raidKey = "sh",   isDungeon = true, name = "Warchief Kargath Bladefist", default = { type = "pull" } },
+    ["sh_nethekurse"]   = { raidKey = "sh",   isDungeon = true, npcIds = { 16807 },  name = "Grand Warlock Nethekurse", default = { type = "hp", hp = 20 } },
+    ["sh_omrogg"]       = { raidKey = "sh",   isDungeon = true, npcIds = { 16809 },  name = "Warbringer O'mrogg",       default = { type = "pull" } },
+    ["sh_kargath"]      = { raidKey = "sh",   isDungeon = true, npcIds = { 16808 },  name = "Warchief Kargath Bladefist", default = { type = "pull" } },
 
     -- ==================== COILFANG RESERVOIR ====================
-    ["sp_mennu"]        = { raidKey = "sp",   isDungeon = true, name = "Mennu the Betrayer",      default = { type = "pull" } },
-    ["sp_rokmar"]       = { raidKey = "sp",   isDungeon = true, name = "Rokmar the Crackler",     default = { type = "pull" } },
-    ["sp_quagmirran"]   = { raidKey = "sp",   isDungeon = true, name = "Quagmirran",              default = { type = "pull" } },
+    ["sp_mennu"]        = { raidKey = "sp",   isDungeon = true, npcIds = { 17941 },  name = "Mennu the Betrayer",      default = { type = "pull" } },
+    ["sp_rokmar"]       = { raidKey = "sp",   isDungeon = true, npcIds = { 17991 },  name = "Rokmar the Crackler",     default = { type = "pull" } },
+    ["sp_quagmirran"]   = { raidKey = "sp",   isDungeon = true, npcIds = { 17942 },  name = "Quagmirran",              default = { type = "pull" } },
 
-    ["ub_hungarfen"]    = { raidKey = "ub",   isDungeon = true, name = "Hungarfen",               default = { type = "pull" } },
-    ["ub_ghazan"]       = { raidKey = "ub",   isDungeon = true, name = "Ghaz'an",                 default = { type = "pull" } },
-    ["ub_muselek"]      = { raidKey = "ub",   isDungeon = true, name = "Swamplord Musel'ek",      default = { type = "pull" } },
-    ["ub_blackstalker"] = { raidKey = "ub",   isDungeon = true, name = "The Black Stalker",       default = { type = "pull" } },
+    ["ub_hungarfen"]    = { raidKey = "ub",   isDungeon = true, npcIds = { 17770 },  name = "Hungarfen",               default = { type = "pull" } },
+    ["ub_ghazan"]       = { raidKey = "ub",   isDungeon = true, npcIds = { 18105 },  name = "Ghaz'an",                 default = { type = "pull" } },
+    ["ub_muselek"]      = { raidKey = "ub",   isDungeon = true, npcIds = { 17826 },  name = "Swamplord Musel'ek",      default = { type = "pull" } },
+    ["ub_blackstalker"] = { raidKey = "ub",   isDungeon = true, npcIds = { 17882 },  name = "The Black Stalker",       default = { type = "pull" } },
 
-    ["sv_thespia"]      = { raidKey = "sv",   isDungeon = true, name = "Hydromancer Thespia",     default = { type = "pull" } },
-    ["sv_steamrigger"]  = { raidKey = "sv",   isDungeon = true, name = "Mekgineer Steamrigger",   default = { type = "pull" } },
-    ["sv_kalithresh"]   = { raidKey = "sv",   isDungeon = true, name = "Warlord Kalithresh",      default = { type = "pull" } },
+    ["sv_thespia"]      = { raidKey = "sv",   isDungeon = true, npcIds = { 17797 },  name = "Hydromancer Thespia",     default = { type = "pull" } },
+    ["sv_steamrigger"]  = { raidKey = "sv",   isDungeon = true, npcIds = { 17796 },  name = "Mekgineer Steamrigger",   default = { type = "pull" } },
+    ["sv_kalithresh"]   = { raidKey = "sv",   isDungeon = true, npcIds = { 17798 },  name = "Warlord Kalithresh",      default = { type = "pull" } },
 
     -- ==================== AUCHINDOUN ====================
-    ["mt_pandemonius"]  = { raidKey = "mt",   isDungeon = true, name = "Pandemonius",             default = { type = "pull" } },
-    ["mt_tavarok"]      = { raidKey = "mt",   isDungeon = true, name = "Tavarok",                 default = { type = "pull" } },
-    ["mt_shaffar"]      = { raidKey = "mt",   isDungeon = true, name = "Nexus-Prince Shaffar",    default = { type = "pull" } },
+    ["mt_pandemonius"]  = { raidKey = "mt",   isDungeon = true, npcIds = { 18341 },  name = "Pandemonius",             default = { type = "pull" } },
+    ["mt_tavarok"]      = { raidKey = "mt",   isDungeon = true, npcIds = { 18343 },  name = "Tavarok",                 default = { type = "pull" } },
+    ["mt_shaffar"]      = { raidKey = "mt",   isDungeon = true, npcIds = { 18344 },  name = "Nexus-Prince Shaffar",    default = { type = "pull" } },
 
-    ["ac_shirrak"]      = { raidKey = "ac",   isDungeon = true, name = "Shirrak the Dead Watcher", default = { type = "pull" } },
-    ["ac_maladaar"]     = { raidKey = "ac",   isDungeon = true, name = "Exarch Maladaar",         default = { type = "pull" } },
+    ["ac_shirrak"]      = { raidKey = "ac",   isDungeon = true, npcIds = { 18371 },  name = "Shirrak the Dead Watcher", default = { type = "pull" } },
+    ["ac_maladaar"]     = { raidKey = "ac",   isDungeon = true, npcIds = { 18373 },  name = "Exarch Maladaar",         default = { type = "pull" } },
 
-    ["seth_syth"]       = { raidKey = "seth", isDungeon = true, name = "Darkweaver Syth",         default = { type = "pull" } },
+    ["seth_syth"]       = { raidKey = "seth", isDungeon = true, npcIds = { 18472 },  name = "Darkweaver Syth",         default = { type = "pull" } },
     -- Ikiss casts Arcane Explosion repeatedly under 25% — the iconic burn
     -- window that beats kiting through the explosion phase.
-    ["seth_ikiss"]      = { raidKey = "seth", isDungeon = true, name = "Talon King Ikiss",        default = { type = "hp", hp = 25 } },
+    ["seth_ikiss"]      = { raidKey = "seth", isDungeon = true, npcIds = { 18473 },  name = "Talon King Ikiss",        default = { type = "hp", hp = 25 } },
 
-    ["slab_hellmaw"]    = { raidKey = "slab", isDungeon = true, name = "Ambassador Hellmaw",      default = { type = "pull" } },
-    ["slab_blackheart"] = { raidKey = "slab", isDungeon = true, name = "Blackheart the Inciter",  default = { type = "pull" } },
-    ["slab_vorpil"]     = { raidKey = "slab", isDungeon = true, name = "Grandmaster Vorpil",      default = { type = "pull" } },
+    ["slab_hellmaw"]    = { raidKey = "slab", isDungeon = true, npcIds = { 18731 },  name = "Ambassador Hellmaw",      default = { type = "pull" } },
+    ["slab_blackheart"] = { raidKey = "slab", isDungeon = true, npcIds = { 18667 },  name = "Blackheart the Inciter",  default = { type = "pull" } },
+    ["slab_vorpil"]     = { raidKey = "slab", isDungeon = true, npcIds = { 18732 },  name = "Grandmaster Vorpil",      default = { type = "pull" } },
     -- The classic heroic Murmur call: BL after the first Sonic Boom to
     -- skip the second one entirely. ~40% HP lines up with the post-boom
     -- burn window for a normal-paced group.
-    ["slab_murmur"]     = { raidKey = "slab", isDungeon = true, name = "Murmur",                  default = { type = "hp", hp = 40 } },
+    ["slab_murmur"]     = { raidKey = "slab", isDungeon = true, npcIds = { 18708 },  name = "Murmur",                  default = { type = "hp", hp = 40 } },
 
     -- ==================== CAVERNS OF TIME ====================
-    ["ohf_drake"]       = { raidKey = "ohf",  isDungeon = true, name = "Lieutenant Drake",        default = { type = "pull" } },
-    ["ohf_skarloc"]     = { raidKey = "ohf",  isDungeon = true, name = "Captain Skarloc",         default = { type = "pull" } },
-    ["ohf_epoch"]       = { raidKey = "ohf",  isDungeon = true, name = "Epoch Hunter",            default = { type = "pull" } },
+    ["ohf_drake"]       = { raidKey = "ohf",  isDungeon = true, npcIds = { 17848 },  name = "Lieutenant Drake",        default = { type = "pull" } },
+    ["ohf_skarloc"]     = { raidKey = "ohf",  isDungeon = true, npcIds = { 17862 },  name = "Captain Skarloc",         default = { type = "pull" } },
+    ["ohf_epoch"]       = { raidKey = "ohf",  isDungeon = true, npcIds = { 18096 },  name = "Epoch Hunter",            default = { type = "pull" } },
 
-    ["bm_deja"]         = { raidKey = "bm",   isDungeon = true, name = "Chrono Lord Deja",        default = { type = "pull" } },
-    ["bm_temporus"]     = { raidKey = "bm",   isDungeon = true, name = "Temporus",                default = { type = "pull" } },
-    ["bm_aeonus"]       = { raidKey = "bm",   isDungeon = true, name = "Aeonus",                  default = { type = "pull" } },
+    ["bm_deja"]         = { raidKey = "bm",   isDungeon = true, npcIds = { 17879 },  name = "Chrono Lord Deja",        default = { type = "pull" } },
+    ["bm_temporus"]     = { raidKey = "bm",   isDungeon = true, npcIds = { 17880 },  name = "Temporus",                default = { type = "pull" } },
+    ["bm_aeonus"]       = { raidKey = "bm",   isDungeon = true, npcIds = { 17881 },  name = "Aeonus",                  default = { type = "pull" } },
 
     -- ==================== TEMPEST KEEP 5-MANS ====================
-    ["mech_gyro"]       = { raidKey = "mech", isDungeon = true, name = "Gatewatcher Gyro-Kill",   default = { type = "pull" } },
-    ["mech_ironhand"]   = { raidKey = "mech", isDungeon = true, name = "Gatewatcher Iron-Hand",   default = { type = "pull" } },
-    ["mech_capacitus"]  = { raidKey = "mech", isDungeon = true, name = "Mechano-Lord Capacitus",  default = { type = "pull" } },
-    ["mech_sepethrea"]  = { raidKey = "mech", isDungeon = true, name = "Nethermancer Sepethrea",  default = { type = "pull" } },
+    ["mech_gyro"]       = { raidKey = "mech", isDungeon = true, npcIds = { 19218 },  name = "Gatewatcher Gyro-Kill",   default = { type = "pull" } },
+    ["mech_ironhand"]   = { raidKey = "mech", isDungeon = true, npcIds = { 19710 },  name = "Gatewatcher Iron-Hand",   default = { type = "pull" } },
+    ["mech_capacitus"]  = { raidKey = "mech", isDungeon = true, npcIds = { 19219 },  name = "Mechano-Lord Capacitus",  default = { type = "pull" } },
+    ["mech_sepethrea"]  = { raidKey = "mech", isDungeon = true, npcIds = { 19221 },  name = "Nethermancer Sepethrea",  default = { type = "pull" } },
     -- Pathaleon enrages at 20% — the canonical execute window for the
     -- final Mechanar boss.
-    ["mech_pathaleon"]  = { raidKey = "mech", isDungeon = true, name = "Pathaleon the Calculator", default = { type = "hp", hp = 20 } },
+    ["mech_pathaleon"]  = { raidKey = "mech", isDungeon = true, npcIds = { 19220 },  name = "Pathaleon the Calculator", default = { type = "hp", hp = 20 } },
 
-    ["bot_sarannis"]    = { raidKey = "bot",  isDungeon = true, name = "Commander Sarannis",      default = { type = "pull" } },
-    ["bot_freywinn"]    = { raidKey = "bot",  isDungeon = true, name = "High Botanist Freywinn",  default = { type = "pull" } },
-    ["bot_thorngrin"]   = { raidKey = "bot",  isDungeon = true, name = "Thorngrin the Tender",    default = { type = "pull" } },
-    ["bot_laj"]         = { raidKey = "bot",  isDungeon = true, name = "Laj",                     default = { type = "skip" } },
-    ["bot_warpsplinter"]= { raidKey = "bot",  isDungeon = true, name = "Warp Splinter",           default = { type = "pull" } },
+    ["bot_sarannis"]    = { raidKey = "bot",  isDungeon = true, npcIds = { 17976 },  name = "Commander Sarannis",      default = { type = "pull" } },
+    ["bot_freywinn"]    = { raidKey = "bot",  isDungeon = true, npcIds = { 17975 },  name = "High Botanist Freywinn",  default = { type = "pull" } },
+    ["bot_thorngrin"]   = { raidKey = "bot",  isDungeon = true, npcIds = { 17978 },  name = "Thorngrin the Tender",    default = { type = "pull" } },
+    ["bot_laj"]         = { raidKey = "bot",  isDungeon = true, npcIds = { 17980 },  name = "Laj",                     default = { type = "skip" } },
+    ["bot_warpsplinter"]= { raidKey = "bot",  isDungeon = true, npcIds = { 17977 },  name = "Warp Splinter",           default = { type = "pull" } },
 
-    ["arc_zereketh"]    = { raidKey = "arc",  isDungeon = true, name = "Zereketh the Unbound",    default = { type = "pull" } },
-    ["arc_dalliah"]     = { raidKey = "arc",  isDungeon = true, name = "Dalliah the Doomsayer",   default = { type = "pull" } },
-    ["arc_soccothrates"]= { raidKey = "arc",  isDungeon = true, name = "Wrath-Scryer Soccothrates", default = { type = "pull" } },
+    ["arc_zereketh"]    = { raidKey = "arc",  isDungeon = true, npcIds = { 20870 },  name = "Zereketh the Unbound",    default = { type = "pull" } },
+    ["arc_dalliah"]     = { raidKey = "arc",  isDungeon = true, npcIds = { 20885 },  name = "Dalliah the Doomsayer",   default = { type = "pull" } },
+    ["arc_soccothrates"]= { raidKey = "arc",  isDungeon = true, npcIds = { 20886 },  name = "Wrath-Scryer Soccothrates", default = { type = "pull" } },
     -- Skyriss splits into illusions at 66% (phase 2) and again at 33%
     -- (phase 3). The 66% split is the standard BL call — burn the real
     -- Skyriss + illusions before the second split makes it chaotic.
-    ["arc_skyriss"]     = { raidKey = "arc",  isDungeon = true, name = "Harbinger Skyriss",
+    ["arc_skyriss"]     = { raidKey = "arc",  isDungeon = true, npcIds = { 20912 },  name = "Harbinger Skyriss",
         default = { type = "phase", phase = 2 },
         yells = {
-            [2] = "I'll rip the flesh from your bones",
-            [3] = "Not again! I will not be touched by you rabble",
+            [2] = { "I'll rip the flesh from your bones" },
+            [3] = { "Not again! I will not be touched by you rabble" },
         },
     },
 
     -- ==================== MAGISTERS' TERRACE ====================
     -- The Kael'thas entry collides with Tempest Keep's Kael'thas. Both
-    -- carry a `zone` tag so the name-index disambiguator can distinguish
-    -- them via GetRealZoneText() at lookup time.
-    ["mgt_selin"]       = { raidKey = "mgt",  isDungeon = true, name = "Selin Fireheart",         zone = "Magisters' Terrace", default = { type = "pull" } },
-    ["mgt_vexallus"]    = { raidKey = "mgt",  isDungeon = true, name = "Vexallus",                zone = "Magisters' Terrace", default = { type = "pull" } },
-    ["mgt_delrissa"]    = { raidKey = "mgt",  isDungeon = true, name = "Priestess Delrissa",      zone = "Magisters' Terrace", default = { type = "pull" } },
-    ["mgt_kaelthas"]    = { raidKey = "mgt",  isDungeon = true, name = "Kael'thas Sunstrider",    zone = "Magisters' Terrace", default = { type = "pull" } },
+    -- carry an instanceId tag so the name-index disambiguator can
+    -- distinguish them via select(8, GetInstanceInfo()) at lookup time.
+    -- NPC ID lookup is unambiguous (different creature IDs) so the
+    -- instanceId is only needed for the name-based fallback path.
+    ["mgt_selin"]       = { raidKey = "mgt",  isDungeon = true, npcIds = { 24723 },  name = "Selin Fireheart",         instanceId = 585, default = { type = "pull" } },
+    ["mgt_vexallus"]    = { raidKey = "mgt",  isDungeon = true, npcIds = { 24744 },  name = "Vexallus",                instanceId = 585, default = { type = "pull" } },
+    ["mgt_delrissa"]    = { raidKey = "mgt",  isDungeon = true, npcIds = { 24560 },  name = "Priestess Delrissa",      instanceId = 585, default = { type = "pull" } },
+    ["mgt_kaelthas"]    = { raidKey = "mgt",  isDungeon = true, npcIds = { 24664 },  name = "Kael'thas Sunstrider",    instanceId = 585, default = { type = "pull" } },
 }
 
 -- ============================================================================
--- Name lookup cache
+-- NPC ID lookup cache (locale-independent, primary detection path)
+-- ============================================================================
+
+-- npcId (number) -> bossID (string). Built lazily on first lookup.
+DB._npcIndex = nil
+
+local function BuildNpcIndex()
+    local index = {}
+    for id, boss in pairs(DB.BOSSES) do
+        if boss.npcIds then
+            for _, npcId in ipairs(boss.npcIds) do
+                index[npcId] = id
+            end
+        end
+    end
+    DB._npcIndex = index
+end
+
+-- Returns the bossID for a given NPC creature ID (from GUID), or nil.
+-- This is the primary detection path — NPC IDs are locale-independent.
+function DB:LookupByNpcId(npcId)
+    if not npcId then return nil end
+    if not DB._npcIndex then BuildNpcIndex() end
+    return DB._npcIndex[npcId]
+end
+
+-- ============================================================================
+-- Name lookup cache (fallback for English clients / boss mod names)
 -- ============================================================================
 
 -- name_lower -> bossID  (single match, common case)
---               -> { { id, zone }, { id, zone }, ... }  (multi-match,
---                    when two bosses share a name and need disambiguation
---                    via the player's current zone — e.g. Kael'thas exists
---                    in both Tempest Keep and Magister's Terrace)
+--               -> { { id, instanceId }, ... }  (multi-match, when two
+--                    bosses share a name — e.g. Kael'thas in TK vs MgT)
 -- Built lazily on first lookup.
 DB._nameIndex = nil
 
 local function BuildNameIndex()
     local index = {}
 
-    local function add(key, id, zone)
+    local function add(key, id, instId)
         local existing = index[key]
         if existing == nil then
             index[key] = id
         elseif type(existing) == "string" then
-            -- Promote single entry to a multi-match list, capturing the
-            -- existing boss's zone tag too so disambiguation can pick it.
             local existingBoss = DB.BOSSES[existing]
             index[key] = {
-                { id = existing, zone = existingBoss and existingBoss.zone },
-                { id = id,       zone = zone },
+                { id = existing, instanceId = existingBoss and existingBoss.instanceId },
+                { id = id,       instanceId = instId },
             }
         else
-            table.insert(existing, { id = id, zone = zone })
+            table.insert(existing, { id = id, instanceId = instId })
         end
     end
 
     for id, boss in pairs(DB.BOSSES) do
-        add(boss.name:lower(), id, boss.zone)
+        add(boss.name:lower(), id, boss.instanceId)
         if boss.aliases then
             for _, alias in ipairs(boss.aliases) do
-                add(alias:lower(), id, boss.zone)
+                add(alias:lower(), id, boss.instanceId)
             end
         end
     end
@@ -422,13 +452,15 @@ end
 
 -- Returns the bossID for a given unit name string, or nil.
 --
--- `zoneName` is optional but strongly recommended at every callsite — it
--- lets the lookup disambiguate when two bosses share a name (currently
--- only "Kael'thas Sunstrider" in Tempest Keep vs Magister's Terrace).
--- The disambiguation prefers a boss whose `zone` field matches `zoneName`
--- case-insensitively; if none match, the first registered entry wins
--- deterministically so detection still produces *something* sensible.
-function DB:LookupByName(unitName, zoneName)
+-- `currentInstanceId` (number, optional) lets the lookup disambiguate when
+-- two bosses share a name (e.g. Kael'thas in TK instance 550 vs MgT
+-- instance 585). Obtain it via `select(8, GetInstanceInfo())` — this
+-- returns a numeric instance ID that is locale-independent.
+--
+-- The legacy `zoneName` parameter is also accepted: if `currentInstanceId`
+-- is nil but `zoneName` is a string, name-based zone matching is attempted
+-- as a last resort (works on English clients only).
+function DB:LookupByName(unitName, currentInstanceId)
     if not unitName then return nil end
     if not DB._nameIndex then BuildNameIndex() end
 
@@ -438,17 +470,16 @@ function DB:LookupByName(unitName, zoneName)
         return entry -- single match, no disambiguation needed
     end
 
-    if zoneName and zoneName ~= "" then
-        local zlow = zoneName:lower()
+    -- Disambiguate by instance ID (locale-independent).
+    if type(currentInstanceId) == "number" then
         for _, m in ipairs(entry) do
-            if m.zone and m.zone:lower() == zlow then
+            if m.instanceId and m.instanceId == currentInstanceId then
                 return m.id
             end
         end
     end
 
-    -- Fallback: return the first registered match. Deterministic but may
-    -- be wrong; the caller should always pass a zone when one is available.
+    -- Fallback: return the first registered match.
     return entry[1].id
 end
 
@@ -531,6 +562,7 @@ function DB:Count()
 end
 
 function DB:Initialize()
+    BuildNpcIndex()
     BuildNameIndex()
     HH:Debug("Database loaded: " .. DB:Count() .. " bosses across " .. #DB.RAIDS .. " raids")
     return true

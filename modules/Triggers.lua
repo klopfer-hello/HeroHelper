@@ -216,6 +216,23 @@ end
 -- running phase counter reaches the configured target. Yell matching is a
 -- simple case-insensitive substring search against the patterns declared in
 -- Database.yells per boss.
+-- Checks whether `text` (lowercased) matches any pattern in `patterns`.
+-- `patterns` is either a list of strings (new format) or a single string
+-- (legacy format, still accepted for backward compatibility).
+local function MatchesYellPatterns(lower, patterns)
+    if type(patterns) == "string" then
+        return lower:find(patterns:lower(), 1, true) and patterns or nil
+    end
+    if type(patterns) == "table" then
+        for _, p in ipairs(patterns) do
+            if type(p) == "string" and lower:find(p:lower(), 1, true) then
+                return p
+            end
+        end
+    end
+    return nil
+end
+
 local function OnBossYell(text)
     if not HH.State.currentBossID or not text then return end
     local boss = HH.Database:Get(HH.State.currentBossID)
@@ -229,10 +246,10 @@ local function OnBossYell(text)
 
     for _, phase in ipairs(phases) do
         if phase > currentPhase then
-            local pattern = boss.yells[phase]
-            if type(pattern) == "string" and lower:find(pattern:lower(), 1, true) then
+            local matched = MatchesYellPatterns(lower, boss.yells[phase])
+            if matched then
                 currentPhase = phase
-                HH:Debug("Phase advanced to " .. phase .. " via yell: " .. pattern)
+                HH:Debug("Phase advanced to " .. phase .. " via yell: " .. matched)
 
                 -- Iterate the active conditions and fire if any phase
                 -- condition's target has been reached. Compound triggers

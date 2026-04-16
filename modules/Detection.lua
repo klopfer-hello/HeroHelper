@@ -6,9 +6,14 @@
 
     1. BigWigs (via the "BigWigs_OnBossEngage" / "BigWigs_OnBossDisable"
        messages broadcast through its callback handler)
-    2. Deadly Boss Mods (via DBM's "pull" callback on its event dispatcher)
+    2. Deadly Boss Mods (via DBM's "DBM_Pull" callback on its event dispatcher)
     3. Fallback unit scanning: every time target/mouseover/focus/raid targets
-       change, scan them for a name that matches an entry in the Database.
+       change, scan them for an NPC ID (from GUID) or name that matches the
+       Database.
+
+    The primary detection path uses NPC creature IDs extracted from UnitGUID.
+    These are locale-independent so the addon works on any client language.
+    Name-based matching is kept as a fallback for edge cases.
 
     Whichever source fires first sets HH.State.currentBossID and fires the
     "BOSS_PULL" event on the internal event bus.
@@ -59,6 +64,32 @@ function Detection:GetScanUnits()
 end
 
 -- ============================================================================
+-- GUID → NPC ID helper
+-- ============================================================================
+
+-- TBC Classic GUIDs follow the format:
+--     Creature-0-XXXX-XXXX-XXXX-NPCID-XXXXXXXX
+-- Field 6 (1-indexed, dash-separated) is the NPC creature ID.
+-- Returns a number, or nil if the GUID is not a Creature type.
+local function NpcIdFromGUID(guid)
+    if not guid then return nil end
+    -- Quick prefix check before the heavier split.
+    if guid:sub(1, 8) ~= "Creature" then return nil end
+    local _, _, _, _, _, npcStr = strsplit("-", guid)
+    return tonumber(npcStr)
+end
+
+-- Returns the numeric instance ID for the player's current instance.
+-- Locale-independent; used for name-based disambiguation (Kael'thas).
+local function GetCurrentInstanceId()
+    if GetInstanceInfo then
+        local _, _, _, _, _, _, _, instanceId = GetInstanceInfo()
+        return instanceId
+    end
+    return nil
+end
+
+-- ============================================================================
 -- Core scan
 -- ============================================================================
 
@@ -67,14 +98,21 @@ function Detection:ScanUnits()
 
     local units = self:GetScanUnits()
 
-    -- Captured once per scan: lets DB:LookupByName disambiguate name
-    -- collisions like Kael'thas (TK raid vs MgT 5-man).
-    local zone = GetRealZoneText and GetRealZoneText() or nil
+    -- Captured once per scan for name-based fallback disambiguation.
+    local instanceId = GetCurrentInstanceId()
 
     for _, unit in ipairs(units) do
         if UnitExists(unit) and not UnitIsDeadOrGhost(unit) and UnitCanAttack("player", unit) then
-            local name = UnitName(unit)
-            local id = name and HH.Database:LookupByName(name, zone)
+            -- Primary path: locale-independent NPC ID from GUID.
+            local npcId = NpcIdFromGUID(UnitGUID(unit))
+            local id = npcId and HH.Database:LookupByNpcId(npcId)
+
+            -- Fallback: name-based lookup (works on English clients).
+            if not id then
+                local name = UnitName(unit)
+                id = name and HH.Database:LookupByName(name, instanceId)
+            end
+
             if id then
                 -- Dungeon bosses require the unit to be in combat before we
                 -- lock in. Without this check, pulling trash near an idle
@@ -84,7 +122,8 @@ function Detection:ScanUnits()
                 if boss and boss.isDungeon and not UnitAffectingCombat(unit) then
                     -- Skip: boss is in the database but not yet engaged.
                 else
-                    self:SetCurrentBoss(id, name, unit)
+                    local displayName = UnitName(unit)
+                    self:SetCurrentBoss(id, displayName, unit)
                     return
                 end
             end
@@ -127,11 +166,20 @@ function Detection:HookBigWigs()
 
     local ok, err = pcall(function()
         BW.RegisterMessage(HH, "BigWigs_OnBossEngage", function(_, module, diff)
-            local bossName = module and (module.displayName or module.moduleName)
-            local zone = GetRealZoneText and GetRealZoneText() or nil
-            local id = bossName and HH.Database:LookupByName(bossName, zone)
+            -- Try creature ID first (locale-independent).
+            local id
+            if module and module.creatureId then
+                id = HH.Database:LookupByNpcId(module.creatureId)
+            end
+            -- Fallback: name-based lookup.
+            if not id then
+                local bossName = module and (module.displayName or module.moduleName)
+                local instanceId = GetCurrentInstanceId()
+                id = bossName and HH.Database:LookupByName(bossName, instanceId)
+            end
             if id then
-                Detection:SetCurrentBoss(id, bossName)
+                local displayName = module and (module.displayName or module.moduleName)
+                Detection:SetCurrentBoss(id, displayName)
             end
         end)
         BW.RegisterMessage(HH, "BigWigs_OnBossDisable", function(_, module)
@@ -151,7 +199,6 @@ end
 -- DBM integration
 -- ============================================================================
 
--- DBM exposes DBM.RegisterCallback(self, "pull", handler) as of the TBC build.
 function Detection:HookDBM()
     local dbm = _G.DBM
     if not dbm or type(dbm.RegisterCallback) ~= "function" then return false end
@@ -160,14 +207,23 @@ function Detection:HookDBM()
         -- DBM prefixes all callback event names with "DBM_". The callback
         -- function receives (event, mod, delay, synced, startHp).
         dbm:RegisterCallback("DBM_Pull", function(event, mod, delay, ...)
+            -- Try creature ID first (locale-independent).
+            local id
+            local npcId = mod and mod.combatInfo and mod.combatInfo.mob
+            if npcId then
+                id = HH.Database:LookupByNpcId(npcId)
+            end
+            -- Fallback: name-based lookup.
             local bossName = mod and (mod.combatInfo and mod.combatInfo.name or mod.localization and mod.localization.general and mod.localization.general.name)
             if not bossName and mod then bossName = mod.id end
-            local zone = GetRealZoneText and GetRealZoneText() or nil
-            local id = bossName and HH.Database:LookupByName(bossName, zone)
+            if not id then
+                local instanceId = GetCurrentInstanceId()
+                id = bossName and HH.Database:LookupByName(bossName, instanceId)
+            end
             if id then
                 Detection:SetCurrentBoss(id, bossName)
             else
-                HH:Debug("DBM_Pull: no DB match for '" .. tostring(bossName) .. "'")
+                HH:Debug("DBM_Pull: no DB match for npcId=" .. tostring(npcId) .. " name='" .. tostring(bossName) .. "'")
             end
         end)
         dbm:RegisterCallback("DBM_Kill", function() end)
@@ -190,18 +246,37 @@ end
 -- ============================================================================
 
 -- Returns the HP percentage of the current boss across all units we can see,
--- or nil if no valid unit is found.
+-- or nil if no valid unit is found. Uses NPC ID matching (locale-independent)
+-- with a name fallback.
 function Detection:GetCurrentBossHPPct()
     if not HH.State.currentBossID then return nil end
-    local wantName = HH.State.currentBossName
+    local boss = HH.Database:Get(HH.State.currentBossID)
+    local wantNpcIds = boss and boss.npcIds
+    local wantName   = HH.State.currentBossName
 
     local units = self:GetScanUnits()
 
     for _, unit in ipairs(units) do
-        if UnitExists(unit) and UnitName(unit) == wantName and not UnitIsDeadOrGhost(unit) then
-            local hp, max = UnitHealth(unit), UnitHealthMax(unit)
-            if max and max > 0 then
-                return (hp / max) * 100
+        if UnitExists(unit) and not UnitIsDeadOrGhost(unit) then
+            local match = false
+            -- Primary: match by NPC ID (locale-independent).
+            if wantNpcIds then
+                local npcId = NpcIdFromGUID(UnitGUID(unit))
+                if npcId then
+                    for _, wanted in ipairs(wantNpcIds) do
+                        if npcId == wanted then match = true; break end
+                    end
+                end
+            end
+            -- Fallback: match by display name.
+            if not match and wantName and UnitName(unit) == wantName then
+                match = true
+            end
+            if match then
+                local hp, max = UnitHealth(unit), UnitHealthMax(unit)
+                if max and max > 0 then
+                    return (hp / max) * 100
+                end
             end
         end
     end
