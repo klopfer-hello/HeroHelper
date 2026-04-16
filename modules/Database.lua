@@ -131,12 +131,12 @@ DB.BOSSES = {
     ["kara_attumen"]    = { raidKey = "kara", name = "Attumen the Huntsman",                           default = { type = "pull" } },
     ["kara_moroes"]     = { raidKey = "kara", name = "Moroes",                                          default = { type = "pull" } },
     ["kara_maiden"]     = { raidKey = "kara", name = "Maiden of Virtue",                                default = { type = "pull" } },
-    ["kara_opera"]      = { raidKey = "kara", name = "Opera Event",                                     aliases = { "Romulo", "Julianne", "Dorothee", "Strawman", "Tinhead", "Roar", "The Crone", "The Big Bad Wolf" }, default = { type = "pull" } },
+    ["kara_opera"]      = { raidKey = "kara", name = "Opera Event",                                     aliases = { "Romulo", "Julianne", "Romulo and Julianne", "Dorothee", "Strawman", "Tinhead", "Roar", "The Crone", "The Big Bad Wolf", "Wizard of Oz" }, default = { type = "pull" } },
     -- Curator Evocates at 20% HP for ~20s, during which the raid freecasts.
     -- Popping BL just as Evocation starts lines the 30s haste window up with
     -- the biggest uninterrupted DPS window of the fight and kills him before
     -- his post-Evocate enrage matters.
-    ["kara_curator"]    = { raidKey = "kara", name = "The Curator",                                     default = { type = "hp", hp = 20 } },
+    ["kara_curator"]    = { raidKey = "kara", name = "The Curator",                                     default = { type = "hp", hp = 30 } },
     ["kara_terestian"]  = { raidKey = "kara", name = "Terestian Illhoof",                               default = { type = "pull" } },
     ["kara_shade"]      = { raidKey = "kara", name = "Shade of Aran",                                   default = { type = "hp", hp = 35 } },
     ["kara_netherspite"]= { raidKey = "kara", name = "Netherspite",                                     default = { type = "pull" } },
@@ -148,7 +148,7 @@ DB.BOSSES = {
             [3] = "Not enough!",                       -- phase 3
         },
     },
-    ["kara_nightbane"]  = { raidKey = "kara", name = "Nightbane",
+    ["kara_nightbane"]  = { raidKey = "kara", name = "Nightbane",                                       aliases = { "Nightbane (Raid)" },
         default = { type = "phase", phase = 2 },
         yells = {
             [2] = "Fleshlings, your time has come",    -- ground phase
@@ -236,7 +236,7 @@ DB.BOSSES = {
     -- fires during the actual DPS phase rather than the channeling setup.
     ["bt_akama"]        = { raidKey = "bt", name = "Shade of Akama",                                    default = { type = "hp", hp = 35 } },
     ["bt_bloodboil"]    = { raidKey = "bt", name = "Gurtogg Bloodboil",                                 default = { type = "hp", hp = 25 } },
-    ["bt_ros"]          = { raidKey = "bt", name = "Reliquary of Souls",                                default = { type = "phase", phase = 3 }, yells = { [3] = "I will not be denied" } },
+    ["bt_ros"]          = { raidKey = "bt", name = "Reliquary of Souls",                                aliases = { "Essence of Souls" }, default = { type = "phase", phase = 3 }, yells = { [3] = "I will not be denied" } },
     ["bt_teron"]        = { raidKey = "bt", name = "Teron Gorefiend",                                   default = { type = "pull" } },
     ["bt_mother"]       = { raidKey = "bt", name = "Mother Shahraz",                                    default = { type = "pull" } },
     ["bt_council"]      = { raidKey = "bt", name = "Illidari Council",                                  default = { type = "pull" } },

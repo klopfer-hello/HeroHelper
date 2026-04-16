@@ -157,17 +157,21 @@ function Detection:HookDBM()
     if not dbm or type(dbm.RegisterCallback) ~= "function" then return false end
 
     local ok, err = pcall(function()
-        dbm:RegisterCallback("pull", function(event, mod, delay, ...)
+        -- DBM prefixes all callback event names with "DBM_". The callback
+        -- function receives (event, mod, delay, synced, startHp).
+        dbm:RegisterCallback("DBM_Pull", function(event, mod, delay, ...)
             local bossName = mod and (mod.combatInfo and mod.combatInfo.name or mod.localization and mod.localization.general and mod.localization.general.name)
             if not bossName and mod then bossName = mod.id end
             local zone = GetRealZoneText and GetRealZoneText() or nil
             local id = bossName and HH.Database:LookupByName(bossName, zone)
             if id then
                 Detection:SetCurrentBoss(id, bossName)
+            else
+                HH:Debug("DBM_Pull: no DB match for '" .. tostring(bossName) .. "'")
             end
         end)
-        dbm:RegisterCallback("kill", function() end)
-        dbm:RegisterCallback("wipe", function()
+        dbm:RegisterCallback("DBM_Kill", function() end)
+        dbm:RegisterCallback("DBM_Wipe", function()
             HH.State.currentBossID   = nil
             HH.State.currentBossName = nil
         end)
