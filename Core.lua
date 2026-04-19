@@ -135,35 +135,42 @@ local defaultDB = {
 }
 
 local defaultCharDB = {
-    -- Per-character settings (reminder button position, size, sound, etc.)
+    -- Per-character settings (reminder position, size, sound, etc.)
     settings = {
-        -- Reminder button
+        -- Visual reminder frame. Not a secure action button; purely a
+        -- positioning / visibility anchor for the icon + pulse overlay.
+        -- Casting is via the user's keybind on the HeroHelperCast macro.
         button = {
-            -- Locked by default so the button is immediately armed to cast.
-            -- Use /hh unlock (or the config checkbox) to reposition it, then
-            -- re-lock when done. /hh test temporarily force-unlocks so you
-            -- can drag a preview button into place.
+            -- Locked = drag-to-move disabled. Set false (or toggle
+            -- /hh unlock) to drag the reminder to a new screen position.
+            -- Test mode (/hh test) force-shows the reminder and force-
+            -- enables drag for easy repositioning.
             locked       = true,
             size         = 40,
-            -- Point on screen (nil until the user drags the button)
+            -- Point on screen (nil until the user drags the reminder)
             point        = "CENTER",
             relativePoint= "CENTER",
             x            = 0,
             y            = 0,
         },
-        -- Sound cue played when the reminder triggers. Value is a LibSharedMedia
-        -- sound key; nil means "no sound".
-        sound          = "HeroHelper: Raid Warning",
+        -- Sound cue played when the reminder triggers. Value is an LSM
+        -- "sound" key (shared with ShamanPower etc.) or nil.
+        sound          = "Raid Warning",
         soundEnabled   = true,
-        -- Keybind macrotext override (empty string = default /cast)
+        -- Custom body for the HeroHelperCast macro. If nil or "", we use
+        -- the default "/cast [@player] <spell>". Useful for adding
+        -- /stopcasting, /use item, /targetlasttarget, etc.
         macrotext      = nil,
-        -- Automatically hide button as soon as BL/Hero debuff is detected on the
-        -- player (prevents spamming the reminder if a second shaman already cast).
+        -- Automatically hide reminder as soon as BL/Hero debuff is detected
+        -- on the player (prevents it lingering after a cast).
         hideOnDebuff   = true,
         -- After-cast auto-hide fade time (seconds)
         postCastFade   = 2,
         -- Minimum seconds between showing the reminder twice on the same pull
         reminderCooldown = 30,
+        -- Set once we've shown the user the first-login keybind-setup hint.
+        -- Persisted so the hint appears on a given character only once.
+        keybindHintShown = false,
     },
 
     -- Per-boss trigger overrides.
@@ -486,7 +493,7 @@ SlashCmdList["HEROHELPER"] = function(msg)
         if HH.ReminderButton and HH.ReminderButton.ToggleTestMode then
             HH.ReminderButton:ToggleTestMode()
             if HH.ReminderButton:IsTestMode() then
-                HH:Print("Test mode ON — drag the button into place, then run /hh test again to disable.", HH.Colors.info)
+                HH:Print("Test mode ON - drag the reminder into place, then run /hh test again to disable.", HH.Colors.info)
             else
                 HH:Print("Test mode OFF.", HH.Colors.info)
             end
@@ -541,7 +548,7 @@ SlashCmdList["HEROHELPER"] = function(msg)
             local roleNames = { [1] = "Primary", [2] = "Secondary", [3] = "Backup", [99] = "Auto" }
             for i, b in ipairs(sorted) do
                 local marker = (b.name == winner) and " [ACTIVE]" or ""
-                HH:Print(("  %d. %s — %s%s"):format(
+                HH:Print(("  %d. %s - %s%s"):format(
                     i, b.name, roleNames[b.priority] or ("priority " .. b.priority),
                     marker), HH.Colors.info)
             end
@@ -563,10 +570,12 @@ SlashCmdList["HEROHELPER"] = function(msg)
 
     HH:Print("Commands:", HH.Colors.highlight)
     HH:Print("  /hh             - open options")
-    HH:Print("  /hh lock | unlock - lock/unlock reminder button")
-    HH:Print("  /hh reset       - reset button position")
-    HH:Print("  /hh test        - toggle test mode (button stays visible for positioning)")
+    HH:Print("  /hh lock | unlock - lock/unlock the reminder in place")
+    HH:Print("  /hh reset       - reset reminder position")
+    HH:Print("  /hh test        - toggle test mode (reminder stays visible for positioning)")
     HH:Print("  /hh mobtest [%]    - fire reminder when target drops below HP% (default 50)")
     HH:Print("  /hh mobtest pull   - fire reminder on the next combat start")
     HH:Print("  /hh debug       - toggle debug output")
+    HH:Print("Cast via the " .. HH.Colors.highlight .. "HeroHelperCast|r " .. HH.Colors.info ..
+             "macro - bind a key via Escape > Key Bindings > Macros.", HH.Colors.info)
 end

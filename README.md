@@ -6,18 +6,19 @@ A simple TBC Classic Anniversary addon that tells Shamans **when** to cast Heroi
 
 <br clear="left"/>
 
-No more checking the spreadsheet between pulls. No more "wait, was I supposed to lust this one?". A glowing button pops up at the right moment — you click it, you cast, you keep DPS'ing.
+No more checking the spreadsheet between pulls. No more "wait, was I supposed to lust this one?". A glowing reminder pops up at the right moment — you press your keybind, you cast, you keep DPS'ing.
 
 ![Reminder button on a boss pull](media/screenshots/screenshot-reminder.png)
-*The reminder button appears when it's time to cast. Click it to fire Heroism or Bloodlust.*
+*The reminder pops up when it's time to cast. Press the key you've bound to the `HeroHelperCast` macro to fire Heroism or Bloodlust.*
 
 ---
 
 ### What it does
 
 - Watches every raid pull and every dungeon boss.
-- Pops a glowing, clickable button at the moment your raid wants Heroism — on the pull, at a specific HP%, when a phase starts, after a set time, or any combination.
+- Pops a glowing reminder at the moment your raid wants Heroism — on the pull, at a specific HP%, when a phase starts, after a set time, or any combination.
 - Stays out of your way the rest of the time. Hidden until needed, fades out after the cast.
+- Creates a per-character `HeroHelperCast` macro you bind to any key you like — casting happens via your keybind, not by clicking the reminder. Combat-safe, no click-through risk.
 - Knows about every boss in **all nine TBC raids** and **every TBC 5-man dungeon**, with researched defaults out of the box.
 - Coordinates with **other shamans in your group** so two of you don't waste a Heroism on the same pull.
 
@@ -27,14 +28,16 @@ No more checking the spreadsheet between pulls. No more "wait, was I supposed to
 
 **1. Install.** Drop the `HeroHelper` folder into `Interface/AddOns/`, or grab the latest release from CurseForge.
 
-**2. First-time setup.** Type `/hh` to open the options.
+**2. Bind your cast key.** On first login the addon creates a macro named **`HeroHelperCast`** in your per-character macro list. Go to **Escape → Key Bindings → Macros**, find `HeroHelperCast`, and bind any key you want (e.g. `Shift+Z`). That's the key you'll press when the reminder pops.
+
+**3. Position the reminder.** Type `/hh` to open the options.
 
 ![Options panel](media/screenshots/screenshot-options-general.png)
 
 - In the **General** tab, choose your sound and (if you raid with another shaman) pick your role: *Primary*, *Secondary*, *Backup*, or *Auto*.
-- Type `/hh test` once to position the reminder button on screen, drag it where you want it, then `/hh test` again to lock it in.
+- Type `/hh test` once to show the reminder, drag it where you want it, then `/hh test` again to hide it.
 
-**3. Pick your triggers.** Open the **Bosses** tab.
+**4. Pick your triggers.** Open the **Bosses** tab.
 
 ![Bosses configuration](media/screenshots/screenshot-options-bosses.png)
 
@@ -49,7 +52,7 @@ Each boss has a default trigger that should be sensible for most raids. You can 
 
 Click **Export** to copy your settings as a share string and send them to the rest of your raid. They click **Import** and you're synced.
 
-**4. Pull a boss.** When it's time, the button pops up. Click it. Done.
+**5. Pull a boss.** When it's time, the reminder pops up. Press your bound key. Done.
 
 ---
 
@@ -57,12 +60,12 @@ Click **Export** to copy your settings as a share string and send them to the re
 
 If your raid has more than one shaman with HeroHelper, set your **role** in the General tab:
 
-- **Primary** — you're the designated Heroist; the button always pops for you first.
-- **Secondary** — the button only pops if the Primary is dead.
+- **Primary** — you're the designated Heroist; the reminder always pops for you first.
+- **Secondary** — the reminder only pops if the Primary is dead.
 - **Backup** — fires if both Primary and Secondary are dead.
 - **Auto** — no explicit role; HeroHelper picks one shaman per pull automatically.
 
-The other shamans see *"Heroism deferred to <name>"* in chat when their reminder is suppressed. If your Primary dies before the pull resolves, the Secondary's button pops automatically.
+The other shamans see *"Heroism deferred to <name>"* in chat when their reminder is suppressed. If your Primary dies before the pull resolves, the Secondary's reminder pops automatically.
 
 ---
 
@@ -71,12 +74,22 @@ The other shamans see *"Heroism deferred to <name>"* in chat when their reminder
 | Command | What it does |
 |---|---|
 | `/hh` | Open the options panel |
-| `/hh test` | Show / hide the reminder button so you can drag it into position |
+| `/hh test` | Show / hide the reminder so you can drag it into position |
 | `/hh mobtest` | Test the reminder by targeting any mob (fires when it drops below 50% HP) |
 | `/hh mobtest pull` | Test the pull-trigger flow on the next mob you engage |
-| `/hh lock` / `/hh unlock` | Lock or unlock the reminder button in place |
-| `/hh reset` | Move the reminder button back to screen center |
+| `/hh lock` / `/hh unlock` | Lock or unlock the reminder in place |
+| `/hh reset` | Move the reminder back to screen center |
 | `/hh debug` | Toggle verbose chat output (for troubleshooting) |
+
+---
+
+### About the cast
+
+HeroHelper creates a per-character macro called **`HeroHelperCast`** in your macro list. Its body is `/cast [@player] Heroism` (or Bloodlust). You bind a key to this macro **once** in Escape → Key Bindings → Macros, and that key is what you press when the reminder pops.
+
+Why a keybind instead of clicking? Clicking a protected-frame reminder during combat hits TBC 2.5.5's combat-lockdown rules hard and produces click-through bugs (clicks under the hidden reminder can fire Heroism on other unit frames). Delegating the cast to WoW's native macro-keybind system sidesteps all of it — pressing the key works the same in and out of combat, and the reminder is a pure visual indicator with no casting machinery attached.
+
+HeroHelper refreshes the macro body on every login to keep it in sync with your current spell (Heroism vs. Bloodlust) — edits made in WoW's macro editor will be reverted. If you need a different macrotext (e.g. `/stopcasting` prefix, `/use` on an item first, etc.), set `HeroHelperCharDB.settings.macrotext` to your custom body in the saved-variable file and HeroHelper will use that instead.
 
 ---
 

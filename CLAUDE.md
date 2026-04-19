@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-HeroHelper is a World of Warcraft addon for **TBC Classic Anniversary** (interface version 20505, game version 2.5.5). It reminds Shamans to cast Heroism / Bloodlust at the right moment on every raid boss by showing a moveable, clickable secure button only when the configured trigger condition for the current boss evaluates to true.
+HeroHelper is a World of Warcraft addon for **TBC Classic Anniversary** (interface version 20505, game version 2.5.5). It reminds Shamans to cast Heroism / Bloodlust at the right moment on every raid boss by showing a moveable, non-protected visual reminder frame only when the configured trigger condition for the current boss evaluates to true. The actual cast is performed by the user via a keybind they set on the per-character `HeroHelperCast` macro (Escape → Key Bindings → Macros).
 
 The addon uses a global namespace `HH` (also `HeroHelper`) populated via the addon vararg `local ADDON_NAME, HH = ...`.
 
@@ -18,10 +18,10 @@ The architecture is deliberately aligned with the [FishingKit](https://github.co
 | [modules/Detection.lua](modules/Detection.lua) | Boss identification via BigWigs callback, DBM callback, or unit-scan fallback |
 | [modules/Triggers.lua](modules/Triggers.lua) | Trigger evaluation engine. Listens for BOSS_PULL, BOSS_YELL, COMBAT_END, COMBAT_START. Fires `HEROHELPER_TRIGGER` when conditions are met. Also owns the `/hh mobtest` diagnostic mode and the per-pull / time / hp / phase / compound (`any`) condition arming |
 | [modules/Comms.lua](modules/Comms.lua) | Multi-shaman coordination over the addon-message channel. Roster-based election (HELLO protocol), locked snapshot at expected group size, alive-aware fallback to backup shamans, optional raid-chat order announcement |
-| [modules/ReminderButton.lua](modules/ReminderButton.lua) | The moveable `SecureActionButtonTemplate` that casts BL/Hero on click |
+| [modules/ReminderButton.lua](modules/ReminderButton.lua) | The moveable non-protected visual reminder frame (icon + pulse + border + label). Also owns the persistent `HeroHelperCast` macro (see EnsureMacro). No cast machinery — casts happen via the user's keybind on the macro. |
 | [modules/Minimap.lua](modules/Minimap.lua) | Self-contained minimap button (same pattern as FishingKit, no LibDBIcon) |
 | [modules/Config.lua](modules/Config.lua) | Two-tab (General / Bosses) config panel |
-| [Libs/](Libs/) | Embedded libraries: `LibStub`, `CallbackHandler-1.0`, `LibSharedMedia-3.0`, `LibUIDropDownMenu-4.0` (Blizzard's `UIDropDownMenuTemplate` is tainted in TBC 2.5.5 and dropdown clicks don't register — this drop-in replacement fixes it) |
+| [Libs/](Libs/) | Embedded libraries: `LibStub` and `LibUIDropDownMenu-4.0`. LibUIDropDownMenu is kept because Blizzard's `UIDropDownMenuTemplate` is tainted in TBC 2.5.5 and dropdown clicks don't register. LibSharedMedia and CallbackHandler were dropped after the decoupled-cast refactor — we render our own curated sound list and don't use a LibStub-based callback registry anywhere. |
 
 ## Event Bus (HH.Events)
 
@@ -79,8 +79,9 @@ HH.State = {
     - BL/Hero not on cooldown (`GetSpellCooldown`)
     - Sated/Exhaustion not on player
     - `triggered` is false
-5. `HEROHELPER_TRIGGER` → ReminderButton shows, plays sound, pulses.
-6. On `COMBAT_END` the whole state resets.
+5. `HEROHELPER_TRIGGER` → ReminderButton shows the non-protected visual reminder, plays sound, pulses.
+6. The user presses the key they've bound to the `HeroHelperCast` macro → WoW casts BL/Hero via the native macro keybind path. No click-to-cast on the reminder — the reminder never captures mouse events that would fire a spell.
+7. On `COMBAT_END` the whole state resets. `PLAYER_AURA_CHANGED` (Sated/Exhaustion) and `COOLDOWN_CHANGED` trigger an early auto-hide of the reminder so it doesn't linger after the cast.
 
 ## Detection Sources
 
@@ -96,7 +97,10 @@ Whichever source fires first locks in `currentBossID` until `COMBAT_END` clears 
 - `boss1`..`boss5` unit tokens exist in TBC Anniversary but are not always populated — boss mods fill them in reliably, so we scan them anyway.
 - `UnitDebuff("player", i)` still returns the multi-value legacy format (name first). We only need the name.
 - `GetSpellCooldown(name_or_id)` returns `start, duration, enabled`. A `duration > 1.5` indicates non-GCD cooldown.
-- `SecureActionButtonTemplate` with `type1=macro` / `macrotext1=/cast [@player] <spell>` works for casting BL/Hero via click in TBC Classic Anniversary (verified by FishingKit's lure button pattern).
+- **Protected-frame visibility during combat is not solvable via the usual tools on TBC 2.5.5.** We tried `SetHitRectInsets`, `SecureHandlerBaseTemplate.Execute`, `SecureHandlerStateTemplate` + `_onstate-display` snippet, and `RegisterStateDriver(frame, "visibility", …)` — all of them silently no-op when invoked from a mid-combat callsite (HP poll ticker, cooldown timer). Only operations that fire during the `PLAYER_REGEN_DISABLED` event dispatch window (e.g. pull-triggered Show) actually took effect. The `LibActionButton-1.0-ElvUI` fork we tried to embed also depends on retail-only C_* tables (`C_UnitAuras`, `C_ActionBar.EnableActionRangeCheck`, etc.) that don't exist in 2.5.5.
+
+  The workaround is the one every combat-reminder addon for Classic uses: **decouple visual from cast.** The reminder is a plain non-protected `Frame` (trivial `Show()`/`Hide()` in any state); the cast is delegated to a persistent per-character macro (`HeroHelperCast`) the user binds a key to in Escape → Key Bindings → Macros. WoW's native keybind → macro system handles the combat-safe cast.
+- Persistent macros are created with `CreateMacro(name, icon, body, 1)` (the `1` flags it per-character) and refreshed with `EditMacro(index, ...)`. Both calls are combat-restricted; we gate them on `InCombatLockdown()` and refresh on PLAYER_LOGIN / PLAYER_ENTERING_WORLD. `GetMacroIndexByName` returns the slot for idempotent updates.
 - `UIDropDownMenuTemplate` requires a globally unique frame name per instantiation — we generate them via a monotonic counter.
 - Native `Slider` is not reliably draggable in TBC Anniversary (same issue FishingKit hit); we use a manual hit-area Frame with `OnMouseDown` cursor tracking.
 - `PlaySoundFile(file, "Master")` works for custom sounds via file path. For built-in sounds we use numeric IDs via `PlaySound()`.

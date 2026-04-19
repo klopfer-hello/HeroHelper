@@ -333,7 +333,7 @@ end
 -- Fires the reminder for the current mobtest target. Shared by the HP-mode
 -- poll and the pull-mode COMBAT_START hook.
 local function FireMobTestReminder(reason)
-    HH:Print(("Mob test: %s — firing reminder."):format(reason), HH.Colors.success)
+    HH:Print(("Mob test: %s - firing reminder."):format(reason), HH.Colors.success)
     -- RB:Show reads HH.State.currentBossName for the label.
     HH.State.currentBossName = mobTest.name
     if HH.ReminderButton and HH.ReminderButton.Show then
@@ -400,7 +400,7 @@ function T:EnableMobTest(arg)
                 T:DisableMobTest("timed out after 10 minutes")
             end
         end)
-        HH:Print(("Mob test (pull) armed — fires on next combat start (%s)."):format(
+        HH:Print(("Mob test (pull) armed - fires on next combat start (%s)."):format(
             mobTest.name), HH.Colors.success)
         return true
     end

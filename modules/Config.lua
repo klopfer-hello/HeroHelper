@@ -20,15 +20,12 @@ local ADDON_NAME, HH = ...
 HH.Config = {}
 local Config = HH.Config
 
-local LSM   = LibStub and LibStub("LibSharedMedia-3.0", true)
--- LibUIDropDownMenu-4.0 is a drop-in replacement for Blizzard's
--- UIDropDownMenuTemplate. Required in TBC Classic 2.5.5 because the
--- native UIDropDownMenuTemplate from the stock client is tainted / buggy:
--- items display but clicks on them don't register, making it impossible
--- to change the selection. Every major TBC addon with working dropdowns
--- (LoonBestInSlot, Questie, WeakAuras, RXPGuides, ProEnchanters, …)
--- ships this same lib for the same reason.
-local LibDD = LibStub and LibStub("LibUIDropDownMenu-4.0", true)
+-- Dropdowns are built from scratch (see MakeDropdown below). We used to
+-- depend on LibUIDropDownMenu-4.0 as a tainted-template workaround, but
+-- its shared global list frame caused stale-button contamination across
+-- dropdowns (Bosses-tab type items leaking into the General-tab role
+-- dropdown). The custom widget each has its own popup with zero shared
+-- state and zero sharing with any other addon's dropdowns.
 
 -- UI constants
 local FRAME_WIDTH  = 460
@@ -206,98 +203,204 @@ local function MakeSlider(parent, label, min, max, step, initial, onChange)
     return container
 end
 
--- Dropdown built on LibUIDropDownMenu-4.0 (see the LibDD require at the top
--- of this file for *why* we can't use the native template). LibDD mirrors
--- the Blizzard API with lib:-prefixed methods, so the call sites look
--- almost identical to the old UIDropDownMenu version — the important
--- difference is that clicks on menu items actually register.
+-- Custom dropdown widget. We deliberately do NOT use LibUIDropDownMenu-4.0
+-- here: LibDD uses a SHARED global list frame (L_DropDownList1) across
+-- every dropdown in the UI, and stale buttons from one dropdown leak into
+-- another (e.g. opening the Bosses-tab type dropdown with 7 items, then
+-- opening the General-tab role dropdown with 4 items, left "Skip"/"Multi"/
+-- "Off" from typeItems visible in the role popup). Every workaround
+-- (clearing, post-add clamp, SetHeight(0), text-blank, etc.) fought the
+-- symptom but didn't stop LibDD from re-rendering leaked state.
 --
--- Each dropdown needs a globally unique frame name, so we generate one per
--- call via a monotonic counter.
--- Force-clear every button on the shared list frame at `level` and reset
--- its numButtons counter. LibDD's UIDropDownMenu_InitializeHelper is
--- *supposed* to do this before an init function runs, but in practice
--- (observed live: sound dropdown opened with its own 5 items plus 4 stale
--- raid entries leaking through as buttons 6-9) the clear does not cover
--- buttons that belonged to a previously-initialized dropdown. Running
--- this at the top of every init closure guarantees a clean slate.
-local function ForceClearDropDownList(level)
-    level = level or 1
-    local listFrameName = "L_DropDownList" .. level
-    local listFrame = _G[listFrameName]
-    if not listFrame then return end
-    -- L_UIDROPDOWNMENU_MAXBUTTONS is the dynamic high-water mark of
-    -- buttons ever created; blasting through that range covers every
-    -- button any dropdown has ever added at this level.
-    local maxButtons = _G.L_UIDROPDOWNMENU_MAXBUTTONS or 32
-    for j = 1, maxButtons do
-        local btn = _G[listFrameName .. "Button" .. j]
-        if btn then btn:Hide() end
-    end
-    listFrame.numButtons = 0
-    listFrame.maxWidth   = 0
-end
+-- Custom widget = self-contained: one popup frame per dropdown, no shared
+-- global state. No cross-contamination is possible. Minimal features:
+-- arrow-on-right control showing current selection, click to open a
+-- scrollable popup list, click item to select + close.
 
 local dropdownCounter = 0
--- `debugTag` is accepted but unused — it was the hook for loud per-dropdown
--- debug prints during the sound-dropdown investigation; kept in the
--- signature so call sites don't need touching if we ever re-enable it.
-local function MakeDropdown(parent, width, items, onSelect, initialText, debugTag)
+
+-- Tracks currently-open dropdown popup so a new open closes the old one
+-- (matches native Blizzard single-popup behavior).
+local activeDropdownPopup = nil
+
+local function ClosePopup(popup)
+    if popup and popup:IsShown() then popup:Hide() end
+end
+
+-- `debugTag` is accepted but unused — kept in the signature for any
+-- future instrumentation.
+-- `onPreview`, if passed, makes each row render a speaker icon that calls
+-- onPreview(entry.value) without selecting the entry. Used by the sound
+-- dropdown so players can audition each sound before committing.
+local function MakeDropdown(parent, width, items, onSelect, initialText, debugTag, onPreview)
     dropdownCounter = dropdownCounter + 1
     local name = "HeroHelperDropdown" .. dropdownCounter
 
-    -- Fallback: if LibDD failed to load (shouldn't happen because we embed
-    -- it, but defensive anyway), fall back to the native template so the
-    -- addon at least loads without errors.
-    local dd
-    if LibDD then
-        dd = LibDD:Create_UIDropDownMenu(name, parent)
-        LibDD:UIDropDownMenu_SetWidth(dd, width)
-        LibDD:UIDropDownMenu_SetText(dd, initialText or "")
+    -- The main control: a single Button showing current selection +
+    -- dropdown arrow on the right.
+    local dd = CreateFrame("Button", name, parent)
+    dd:SetSize(width, 22)
 
-        LibDD:UIDropDownMenu_Initialize(dd, function(self, level)
-            ForceClearDropDownList(level or 1)
-            for _, entry in ipairs(items) do
-                local info = LibDD:UIDropDownMenu_CreateInfo()
-                info.text         = entry.label
-                info.value        = entry.value
-                info.notCheckable = true
-                info.func = function()
-                    LibDD:UIDropDownMenu_SetText(dd, entry.label)
-                    if onSelect then onSelect(entry.value, entry.label) end
-                end
-                LibDD:UIDropDownMenu_AddButton(info, level)
-            end
-        end)
-    else
-        dd = CreateFrame("Frame", name, parent, "UIDropDownMenuTemplate")
-        UIDropDownMenu_SetWidth(dd, width)
-        UIDropDownMenu_SetText(dd, initialText or "")
-        UIDropDownMenu_Initialize(dd, function(self, level)
-            ForceClearDropDownList(level or 1)
-            for _, entry in ipairs(items) do
-                local info = UIDropDownMenu_CreateInfo()
-                info.text         = entry.label
-                info.value        = entry.value
-                info.notCheckable = true
-                info.func = function()
-                    UIDropDownMenu_SetText(dd, entry.label)
-                    if onSelect then onSelect(entry.value, entry.label) end
-                end
-                UIDropDownMenu_AddButton(info, level)
-            end
+    -- Dark background + thin border (FishingKit-aligned style).
+    local bg = dd:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints()
+    bg:SetColorTexture(0.08, 0.08, 0.08, 0.9)
+    AddThinBorder(dd, D.border[1], D.border[2], D.border[3], D.borA)
+
+    -- Text (left-aligned, leaves room on the right for the arrow).
+    local text = dd:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    text:SetPoint("LEFT", dd, "LEFT", 6, 0)
+    text:SetPoint("RIGHT", dd, "RIGHT", -22, 0)
+    text:SetJustifyH("LEFT")
+    text:SetText(initialText or "")
+    text:SetTextColor(D.value[1], D.value[2], D.value[3])
+    dd.text = text
+
+    -- Dropdown arrow (right side).
+    local arrow = dd:CreateTexture(nil, "OVERLAY")
+    arrow:SetSize(12, 12)
+    arrow:SetPoint("RIGHT", dd, "RIGHT", -4, 0)
+    arrow:SetTexture("Interface\\ChatFrame\\ChatFrameExpandArrow")
+    dd.arrow = arrow
+
+    dd:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
+
+    -- Popup frame — one per dropdown, parented to UIParent so it can anchor
+    -- above/below the control without being clipped by the config panel.
+    -- TOOLTIP strata sits above FULLSCREEN_DIALOG, so clicks on popup rows
+    -- beat any click-catcher we place below. See clickCatcher below.
+    local popup = CreateFrame("Frame", name .. "Popup", UIParent)
+    popup:SetFrameStrata("TOOLTIP")
+    popup:SetFrameLevel(dd:GetFrameLevel() + 20)
+    popup:Hide()
+    popup:EnableMouse(true)
+
+    local popupBg = popup:CreateTexture(nil, "BACKGROUND")
+    popupBg:SetAllPoints()
+    popupBg:SetColorTexture(0.05, 0.05, 0.05, 0.95)
+    AddThinBorder(popup, D.border[1], D.border[2], D.border[3], D.borA)
+
+    -- Full-screen invisible click-catcher shown while the popup is open.
+    -- Sits at FULLSCREEN_DIALOG strata — below the popup, above normal UI.
+    -- Any click reaching it is (by elimination) outside the popup, so we
+    -- close. Avoids relying on GetMouseFocus(), which doesn't exist on
+    -- TBC 2.5.5.
+    local clickCatcher = CreateFrame("Frame", nil, UIParent)
+    clickCatcher:SetAllPoints(UIParent)
+    clickCatcher:SetFrameStrata("FULLSCREEN_DIALOG")
+    clickCatcher:EnableMouse(true)
+    clickCatcher:Hide()
+    -- Stash the catcher on the popup so the "close previous popup" path
+    -- in dd.OnClick below can find it regardless of which dropdown it was.
+    popup._hhCatcher = clickCatcher
+
+    -- Rows. At most MAX_VISIBLE_ROWS visible; if there are more items, the
+    -- popup gets a scrollbar.
+    local ROW_H = 18
+    local MAX_VISIBLE_ROWS = 12
+    local numItems = #items
+    local viewportRows = math.min(numItems, MAX_VISIBLE_ROWS)
+    local needsScroll = numItems > MAX_VISIBLE_ROWS
+
+    local popupWidth = width + (needsScroll and 22 or 0)
+    popup:SetSize(popupWidth, viewportRows * ROW_H + 4)
+
+    local function HidePopupAndCatcher()
+        ClosePopup(popup)
+        clickCatcher:Hide()
+        if activeDropdownPopup == popup then activeDropdownPopup = nil end
+    end
+
+    local function SelectEntry(entry)
+        dd.text:SetText(entry.label)
+        HidePopupAndCatcher()
+        if onSelect then onSelect(entry.value, entry.label) end
+    end
+
+    clickCatcher:SetScript("OnMouseDown", function()
+        HidePopupAndCatcher()
+    end)
+
+    -- Build rows inside either a ScrollFrame (if list is long) or directly
+    -- on the popup.
+    local listParent = popup
+    if needsScroll then
+        local scroll = CreateFrame("ScrollFrame", nil, popup, "UIPanelScrollFrameTemplate")
+        scroll:SetPoint("TOPLEFT", popup, "TOPLEFT", 2, -2)
+        scroll:SetPoint("BOTTOMRIGHT", popup, "BOTTOMRIGHT", -22, 2)
+        local scrollChild = CreateFrame("Frame", nil, scroll)
+        scrollChild:SetSize(width - 4, numItems * ROW_H)
+        scroll:SetScrollChild(scrollChild)
+        listParent = scrollChild
+    end
+
+    for i, entry in ipairs(items) do
+        local row = CreateFrame("Button", nil, listParent)
+        if needsScroll then
+            row:SetSize(width - 4, ROW_H)
+            row:SetPoint("TOPLEFT", listParent, "TOPLEFT", 0, -(i - 1) * ROW_H)
+        else
+            row:SetSize(popupWidth - 4, ROW_H)
+            row:SetPoint("TOPLEFT", popup, "TOPLEFT", 2, -2 - (i - 1) * ROW_H)
+        end
+
+        local hi = row:CreateTexture(nil, "HIGHLIGHT")
+        hi:SetAllPoints()
+        hi:SetColorTexture(D.accent[1], D.accent[2], D.accent[3], 0.25)
+
+        local rowText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        rowText:SetPoint("LEFT", row, "LEFT", 6, 0)
+        rowText:SetJustifyH("LEFT")
+        rowText:SetText(entry.label)
+        rowText:SetTextColor(D.value[1], D.value[2], D.value[3])
+
+        -- Optional per-row preview button (speaker icon on the right).
+        -- Clicking it plays the entry's value through onPreview WITHOUT
+        -- selecting the entry or closing the popup — matches ShamanPower's
+        -- audition behavior.
+        if onPreview then
+            local speaker = CreateFrame("Button", nil, row)
+            speaker:SetSize(14, 14)
+            speaker:SetPoint("RIGHT", row, "RIGHT", -4, 0)
+            local tex = speaker:CreateTexture(nil, "ARTWORK")
+            tex:SetAllPoints()
+            tex:SetTexture("Interface\\Common\\VoiceChat-Speaker")
+            speaker:SetHighlightTexture("Interface\\Common\\VoiceChat-On")
+            speaker:SetScript("OnClick", function()
+                onPreview(entry.value, entry.label)
+            end)
+            rowText:SetPoint("RIGHT", speaker, "LEFT", -4, 0)
+        else
+            rowText:SetPoint("RIGHT", row, "RIGHT", -6, 0)
+        end
+
+        row:SetScript("OnClick", function()
+            SelectEntry(entry)
         end)
     end
 
-    -- Expose the SetText method on the frame itself so callers (like the
-    -- sound-dropdown OnShow refresh) can update the displayed text without
-    -- needing to know which underlying API was used.
-    function dd:RefreshText(text)
-        if LibDD then
-            LibDD:UIDropDownMenu_SetText(self, text or "")
-        else
-            UIDropDownMenu_SetText(self, text or "")
+    -- Open/close on main-control click.
+    dd:SetScript("OnClick", function(self)
+        if popup:IsShown() then
+            HidePopupAndCatcher()
+            return
         end
+        -- Close any other open dropdown first (and its click-catcher).
+        if activeDropdownPopup and activeDropdownPopup ~= popup then
+            if activeDropdownPopup._hhCatcher then
+                activeDropdownPopup._hhCatcher:Hide()
+            end
+            ClosePopup(activeDropdownPopup)
+        end
+        popup:ClearAllPoints()
+        popup:SetPoint("TOPLEFT", dd, "BOTTOMLEFT", 0, -2)
+        popup:Show()
+        clickCatcher:Show()
+        activeDropdownPopup = popup
+    end)
+
+    function dd:RefreshText(newText)
+        text:SetText(newText or "")
     end
 
     return dd
@@ -370,7 +473,7 @@ function Config:CreateFrame()
     local closeX = closeBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     closeX:SetAllPoints()
     closeX:SetJustifyH("CENTER")
-    closeX:SetText("|cFF66666B×|r")
+    closeX:SetText("|cFF66666BX|r")
     closeBtn:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square")
     closeBtn:GetHighlightTexture():SetBlendMode("ADD")
     closeBtn:SetScript("OnClick", function() Config:Hide() end)
@@ -567,10 +670,10 @@ function Config:BuildGeneralTab(panel)
     end)
     y = y - ROW_HEIGHT
 
-    -- Persistent test-mode toggle. While enabled the reminder button is
-    -- forced visible, force-unlocked, and completely disarmed (clicks and
-    -- drags never fire the real cast). Uncheck when you're done positioning.
-    local cbTest = MakeCheckbox(panel, "Test mode (show button for positioning)")
+    -- Persistent test-mode toggle. While enabled the reminder is forced
+    -- visible so the user can drag it to their desired position; uncheck
+    -- when done.
+    local cbTest = MakeCheckbox(panel, "Test mode (show reminder for positioning)")
     cbTest:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, y)
     cbTest:HookClick(function(checked)
         if HH.ReminderButton then
@@ -592,99 +695,41 @@ function Config:BuildGeneralTab(panel)
     end)
     y = y - ROW_HEIGHT
 
-    -- Inline sound picker.
-    --
-    -- We deliberately do NOT use a UIDropDownMenu here — LibUIDropDownMenu's
-    -- shared list frame leaked buttons from previously-initialized dropdowns
-    -- into the sound menu on the live client (5 sounds + 4 stale raid names,
-    -- see the git log for the long debugging story). With only ~5 built-in
-    -- sounds to pick from, showing all rows inline is both simpler and a
-    -- better UX: you can see every option at once, there's no menu-open
-    -- animation, and each row has its own 🔊 preview button. Pattern adapted
-    -- from NovaWorldBuffs' LSM30_Sound widget (the check / text / speaker
-    -- row layout) but built with plain CreateFrame so we don't depend on
-    -- AceGUI.
-    local soundRows   = {}
-    local ROW_H       = 20
-    local ROW_INDENT  = 8
-
-    local function RefreshSoundRowSelection()
-        local saved = HH.chardb.settings.sound
-        for _, row in ipairs(soundRows) do
-            if row.key == saved then
-                row.check:Show()
-                row.text:SetTextColor(D.accent[1], D.accent[2], D.accent[3])
-            else
-                row.check:Hide()
-                row.text:SetTextColor(D.value[1], D.value[2], D.value[3])
-            end
-        end
-    end
+    -- Sound picker. Same dropdown widget as the "My role" picker above,
+    -- populated from LSM:List("sound") so every sound any loaded addon
+    -- has registered (BigWigs, ShamanPower, Details, ...) is available.
+    -- A speaker button next to the dropdown plays the currently-selected
+    -- sound so you can audition without closing the menu.
+    local soundLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    soundLabel:SetPoint("TOPLEFT", panel, "TOPLEFT", 18, y - 2)
+    soundLabel:SetText("Sound:")
+    soundLabel:SetTextColor(D.label[1], D.label[2], D.label[3])
 
     local soundList = (HH.ReminderButton and HH.ReminderButton:GetSoundList())
-        or { "HeroHelper: Raid Warning" }
+        or { "Raid Warning" }
+    local soundItems = {}
     for _, key in ipairs(soundList) do
-        local row = CreateFrame("Button", nil, panel)
-        row:SetSize(FRAME_WIDTH - 2*PADDING - 20, ROW_H)
-        row:SetPoint("TOPLEFT", panel, "TOPLEFT", ROW_INDENT, y)
-
-        -- Hover highlight (whole row). Clicking the row anywhere outside
-        -- the speaker button selects this sound.
-        local hi = row:CreateTexture(nil, "HIGHLIGHT")
-        hi:SetAllPoints()
-        hi:SetColorTexture(D.accent[1], D.accent[2], D.accent[3], 0.15)
-
-        -- Left-edge check mark, shown only on the currently selected row.
-        local check = row:CreateTexture(nil, "ARTWORK")
-        check:SetSize(12, 12)
-        check:SetPoint("LEFT", row, "LEFT", 2, 0)
-        check:SetTexture("Interface\\Buttons\\UI-CheckBox-Check")
-        check:Hide()
-        row.check = check
-
-        -- Right-edge speaker button: previews the sound without changing
-        -- the selection. Handy for auditioning alternatives before you
-        -- commit to one.
-        local speaker = CreateFrame("Button", nil, row)
-        speaker:SetSize(16, 16)
-        speaker:SetPoint("RIGHT", row, "RIGHT", -4, 0)
-        local spkTex = speaker:CreateTexture(nil, "ARTWORK")
-        spkTex:SetAllPoints()
-        spkTex:SetTexture("Interface\\Common\\VoiceChat-Speaker")
-        speaker:SetHighlightTexture("Interface\\Common\\VoiceChat-On")
-        speaker:SetScript("OnClick", function()
-            -- Temporarily swap the saved sound so PreviewSound plays this
-            -- specific row's sound, then restore. PreviewSound always reads
-            -- HH.chardb.settings.sound, so this is the simplest way to
-            -- audition a *different* sound without selecting it.
-            local prev = HH.chardb.settings.sound
-            HH.chardb.settings.sound = key
-            if HH.ReminderButton then HH.ReminderButton:PreviewSound() end
-            HH.chardb.settings.sound = prev
-        end)
-
-        local text = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        text:SetPoint("LEFT", check, "RIGHT", 6, 0)
-        text:SetPoint("RIGHT", speaker, "LEFT", -6, 0)
-        text:SetJustifyH("LEFT")
-        text:SetText(key)
-        text:SetTextColor(D.value[1], D.value[2], D.value[3])
-        row.text = text
-        row.key  = key
-
-        row:SetScript("OnClick", function()
-            HH.chardb.settings.sound = key
-            if HH.ReminderButton then HH.ReminderButton:PreviewSound() end
-            RefreshSoundRowSelection()
-        end)
-
-        table.insert(soundRows, row)
-        y = y - ROW_H
+        table.insert(soundItems, { label = key, value = key })
     end
-    -- Small trailing gap after the list.
-    y = y - 4
 
-    RefreshSoundRowSelection()
+    local currentSound = HH.chardb.settings.sound or "Raid Warning"
+
+    -- Per-row speaker lets the player audition each sound before
+    -- committing. The onPreview callback temporarily swaps the saved
+    -- sound so PreviewSound plays *this* row's sound, then restores.
+    local soundDD = MakeDropdown(panel, 200, soundItems, function(value)
+        HH.chardb.settings.sound = value
+        if HH.ReminderButton then HH.ReminderButton:PreviewSound() end
+    end, currentSound, "sound", function(value)
+        if not HH.ReminderButton then return end
+        local prev = HH.chardb.settings.sound
+        HH.chardb.settings.sound = value
+        HH.ReminderButton:PreviewSound()
+        HH.chardb.settings.sound = prev
+    end)
+    soundDD:SetPoint("LEFT", soundLabel, "RIGHT", 4, -2)
+
+    y = y - ROW_HEIGHT - 6
 
     -- Sync checkbox visuals to live saved-variable state each time the panel
     -- is shown. The checkboxes are purely visual — HookClick handles writes,
@@ -701,7 +746,9 @@ function Config:BuildGeneralTab(panel)
         cbLocked:SetChecked(HH.chardb.settings.button.locked)
         cbSoundEnabled:SetChecked(HH.chardb.settings.soundEnabled)
         cbTest:SetChecked(HH.ReminderButton and HH.ReminderButton:IsTestMode() or false)
-        RefreshSoundRowSelection()
+        if soundDD and soundDD.RefreshText then
+            soundDD:RefreshText(HH.chardb.settings.sound or "Raid Warning")
+        end
     end)
 end
 
@@ -748,7 +795,7 @@ function Config:BuildBossesTab(panel)
     -- StaticPopup confirmation for Reset. Registered once; subsequent
     -- invocations of BuildBossesTab overwrite the same slot harmlessly.
     StaticPopupDialogs["HEROHELPER_RESET_BOSSES"] = {
-        text         = "Reset all per-boss HeroHelper settings to defaults?\n\nThis clears every override — HP thresholds, phase picks, disabled flags — for every boss in every raid. The action cannot be undone.",
+        text         = "Reset all per-boss HeroHelper settings to defaults?\n\nThis clears every override (HP thresholds, phase picks, disabled flags) for every boss in every raid. The action cannot be undone.",
         button1      = YES or "Yes",
         button2      = NO  or "No",
         OnAccept     = function()
