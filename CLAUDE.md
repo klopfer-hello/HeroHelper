@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-HeroHelper is a World of Warcraft addon for **TBC Classic Anniversary** (interface version 20505, game version 2.5.5). It reminds Shamans to cast Heroism / Bloodlust at the right moment on every raid boss by showing a moveable, non-protected visual reminder frame only when the configured trigger condition for the current boss evaluates to true. The actual cast is performed by the user via a keybind they set on the per-character `HeroHelperCast` macro (Escape → Key Bindings → Macros).
+HeroHelper is a World of Warcraft addon for **TBC Classic Anniversary** (interface version 20505, game version 2.5.5). It reminds Shamans to cast Heroism / Bloodlust at the right moment on every raid boss by showing a moveable, non-protected visual reminder frame only when the configured trigger condition for the current boss evaluates to true. The addon never casts the spell itself — the user casts Heroism / Bloodlust via whatever action bar / keybind / macro they already have set up. HeroHelper is a timing indicator, nothing more.
 
 The addon uses a global namespace `HH` (also `HeroHelper`) populated via the addon vararg `local ADDON_NAME, HH = ...`.
 
@@ -18,7 +18,7 @@ The architecture is deliberately aligned with the [FishingKit](https://github.co
 | [modules/Detection.lua](modules/Detection.lua) | Boss identification via BigWigs callback, DBM callback, or unit-scan fallback |
 | [modules/Triggers.lua](modules/Triggers.lua) | Trigger evaluation engine. Listens for BOSS_PULL, BOSS_YELL, COMBAT_END, COMBAT_START. Fires `HEROHELPER_TRIGGER` when conditions are met. Also owns the `/hh mobtest` diagnostic mode and the per-pull / time / hp / phase / compound (`any`) condition arming |
 | [modules/Comms.lua](modules/Comms.lua) | Manual multi-shaman coordination over the addon-message channel. HELLO-discovered live roster, plus an explicit `/hh roster lock` command that snapshots the roster, announces the resolved hero order to chat, and suppresses non-winners for the rest of the run. Alive-aware fallback (Primary > Secondary > Backup) is re-evaluated on every fire. Without an active lock, every HeroHelper-using shaman fires independently — there is no auto-locking. |
-| [modules/ReminderButton.lua](modules/ReminderButton.lua) | The moveable non-protected visual reminder frame (icon + pulse + border + label). Also owns the persistent `HeroHelperCast` macro (see EnsureMacro). No cast machinery — casts happen via the user's keybind on the macro. |
+| [modules/ReminderButton.lua](modules/ReminderButton.lua) | The moveable non-protected visual reminder frame (icon + pulse + border + label). No cast machinery of any kind — the reminder is a pure timing indicator, the user casts Heroism / Bloodlust through whatever means they already use. |
 | [modules/Minimap.lua](modules/Minimap.lua) | Self-contained minimap button (same pattern as FishingKit, no LibDBIcon) |
 | [modules/Config.lua](modules/Config.lua) | Two-tab (General / Bosses) config panel |
 | [Libs/](Libs/) | Embedded libraries: `LibStub`, `CallbackHandler-1.0`, `LibSharedMedia-3.0`. LSM provides the shared sound registry that ShamanPower and others use, so HeroHelper's sound picker sees every key any addon registers. `LibUIDropDownMenu-4.0` was removed after stale-button cross-contamination issues on its shared global list frame; dropdowns are now a self-contained custom widget in Config.lua with per-popup state and click-outside dismissal. |
@@ -81,7 +81,7 @@ HH.State = {
     - Sated/Exhaustion not on player
     - `triggered` is false
 5. `HEROHELPER_TRIGGER` → ReminderButton shows the non-protected visual reminder, plays sound, pulses.
-6. The user presses the key they've bound to the `HeroHelperCast` macro → WoW casts BL/Hero via the native macro keybind path. No click-to-cast on the reminder — the reminder never captures mouse events that would fire a spell.
+6. The user casts Heroism / Bloodlust themselves using whatever they already have set up (action bar, keybind, macro). The addon has no cast machinery; the reminder is purely informational.
 7. On `COMBAT_END` the whole state resets. `PLAYER_AURA_CHANGED` (Sated/Exhaustion) and `COOLDOWN_CHANGED` trigger an early auto-hide of the reminder so it doesn't linger after the cast.
 
 ## Detection Sources
@@ -100,8 +100,7 @@ Whichever source fires first locks in `currentBossID` until `COMBAT_END` clears 
 - `GetSpellCooldown(name_or_id)` returns `start, duration, enabled`. A `duration > 1.5` indicates non-GCD cooldown.
 - **Protected-frame visibility during combat is not solvable via the usual tools on TBC 2.5.5.** We tried `SetHitRectInsets`, `SecureHandlerBaseTemplate.Execute`, `SecureHandlerStateTemplate` + `_onstate-display` snippet, and `RegisterStateDriver(frame, "visibility", …)` — all of them silently no-op when invoked from a mid-combat callsite (HP poll ticker, cooldown timer). Only operations that fire during the `PLAYER_REGEN_DISABLED` event dispatch window (e.g. pull-triggered Show) actually took effect. The `LibActionButton-1.0-ElvUI` fork we tried to embed also depends on retail-only C_* tables (`C_UnitAuras`, `C_ActionBar.EnableActionRangeCheck`, etc.) that don't exist in 2.5.5.
 
-  The workaround is the one every combat-reminder addon for Classic uses: **decouple visual from cast.** The reminder is a plain non-protected `Frame` (trivial `Show()`/`Hide()` in any state); the cast is delegated to a persistent per-character macro (`HeroHelperCast`) the user binds a key to in Escape → Key Bindings → Macros. WoW's native keybind → macro system handles the combat-safe cast.
-- Persistent macros are created with `CreateMacro(name, icon, body, 1)` (the `1` flags it per-character) and refreshed with `EditMacro(index, ...)`. Both calls are combat-restricted; we gate them on `InCombatLockdown()` and refresh on PLAYER_LOGIN / PLAYER_ENTERING_WORLD. `GetMacroIndexByName` returns the slot for idempotent updates.
+  The workaround: **the addon does not cast.** The reminder is a plain non-protected `Frame` (trivial `Show()`/`Hide()` in any state), and the user triggers Heroism / Bloodlust through their own existing action bar / keybind / macro. No SecureActionButton, no SecureHandler, no macro-slot management — nothing the addon does during a pull touches protected state.
 - `UIDropDownMenuTemplate` requires a globally unique frame name per instantiation — we generate them via a monotonic counter.
 - Native `Slider` is not reliably draggable in TBC Anniversary (same issue FishingKit hit); we use a manual hit-area Frame with `OnMouseDown` cursor tracking.
 - `PlaySoundFile(file, "Master")` works for custom sounds via file path. For built-in sounds we use numeric IDs via `PlaySound()`.
@@ -117,7 +116,7 @@ Follows **Semantic Versioning** (`MAJOR.MINOR.PATCH`):
 | New backwards-compatible features | MINOR | 1.0.x → 1.1.0 |
 | Bug fixes only | PATCH | 1.1.x → 1.1.1 |
 
-Current version: `2.0.0` (major refactor: reminder is now visual-only, casting via a user-bound `HeroHelperCast` macro; phase trigger type removed with phase bosses converted to HP defaults; multi-shaman coordination is now manual via `/hh roster lock`; LSM-backed sound picker; custom self-contained dropdown widget replacing LibUIDropDownMenu). Semver applies going forward.
+Current version: `2.0.1` (v2.0.0 major refactor + doc and code follow-up to drop the `HeroHelperCast` auto-macro that was erroneously shipped — the reminder is now purely informational with no macro creation or keybind setup required. Everything else from 2.0.0 stands: phase trigger removed with phase bosses converted to HP defaults; multi-shaman coordination is manual via `/hh roster lock`; LSM-backed sound picker; custom self-contained dropdown widget). Semver applies going forward.
 
 ### Release Process
 

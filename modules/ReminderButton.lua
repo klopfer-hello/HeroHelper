@@ -1,32 +1,16 @@
 --[[
     HeroHelper - Reminder Module
 
-    Visual reminder that pops up when BL/Hero should be cast. Purely a
-    non-protected Frame — the ACTUAL cast is not wired to clicking this
-    frame. Casting happens through the persistent "HeroHelperCast" macro
-    the addon creates in the player's macro list: the user binds a key to
-    that macro once in Escape → Key Bindings → Macros, and presses it when
-    the reminder pops.
+    Purely informational reminder. A non-protected Frame pops up with the
+    spell icon + pulsing glow + boss-name label when it's time to cast
+    Heroism / Bloodlust, and hides again when the cast goes off (or
+    combat ends, or the Sated/Exhaustion debuff is detected).
 
-    Why this shape:
-      * Clickable secure-cast buttons are heavily restricted in combat on
-        TBC Classic 2.5.5. Toggling their visibility, hit area, enabled
-        state, or macro reference from Lua mid-combat is variously blocked
-        or silently ignored. We tried every secure-handler variant
-        (SecureHandlerBaseTemplate.Execute, SecureHandlerStateTemplate
-        with _onstate-display, RegisterStateDriver visibility, ...) and
-        none of them reliably flips a protected frame's visibility from
-        a mid-combat callsite on this client.
-      * Decoupling visual from cast sidesteps the problem entirely. A
-        plain Frame can be Shown/Hidden freely at any time, and WoW's
-        native macro keybind system handles the combat-safe cast.
-      * This is the same pattern ElvUI, ShamanPower, and RestedXP use
-        for their combat reminders.
-
-    The persistent macro "HeroHelperCast" is created per-character by
-    EnsureMacro() at Initialize and is refreshed whenever the spell /
-    user override changes. On first login, the user is asked to set a
-    keybind for it.
+    The addon does NOT cast for you. It's a timing reminder — you already
+    have Heroism/Bloodlust bound somewhere (action bar, keybind, whatever)
+    and you trigger it the way you normally would. This keeps the addon
+    out of all the combat-lockdown / protected-frame landmines on
+    TBC Classic 2.5.5 that plagued earlier clickable-reminder designs.
 ]]
 
 local ADDON_NAME, HH = ...
@@ -121,54 +105,6 @@ function RB:GetSoundList()
 end
 
 -- ============================================================================
--- Persistent cast macro
--- ============================================================================
--- The addon creates a per-character macro named "HeroHelperCast" with the
--- cast body. The user binds a key to it in Escape → Key Bindings → Macros.
--- Pressing the bound key fires BL/Hero; the reminder frame is purely
--- visual and never wired to perform the cast itself.
-
-local MACRO_NAME = "HeroHelperCast"
-
-local function ComputeCastText()
-    if not HH.State.spellName then return nil end
-    local override = HH.chardb and HH.chardb.settings and HH.chardb.settings.macrotext
-    if override and override ~= "" then
-        return override
-    end
-    return "/cast [@player] " .. HH.State.spellName
-end
-
--- Creates or updates the HeroHelperCast macro. Returns the macro name on
--- success, nil on failure (macro slots full, spell unknown, in combat).
-local function EnsureMacro()
-    if InCombatLockdown() then return nil end
-    local castText = ComputeCastText()
-    if not castText then return nil end
-
-    local icon = "INV_Misc_QuestionMark"
-    if HH.State.spellID then
-        local tex = select(3, GetSpellInfo(HH.State.spellID))
-        if tex then icon = tex end
-    end
-
-    local index = GetMacroIndexByName and GetMacroIndexByName(MACRO_NAME) or 0
-    if index and index > 0 then
-        if EditMacro then
-            EditMacro(index, MACRO_NAME, icon, castText)
-        end
-        return MACRO_NAME
-    end
-    if CreateMacro then
-        local newIndex = CreateMacro(MACRO_NAME, icon, castText, 1)
-        if newIndex and newIndex > 0 then
-            return MACRO_NAME
-        end
-    end
-    return nil
-end
-
--- ============================================================================
 -- Frame creation
 -- ============================================================================
 
@@ -192,16 +128,13 @@ function RB:Initialize()
     self:CreateFrame()
     self:ApplyPosition()
     self:ApplySize()
-    self:RefreshMacro()
+    self:RefreshIcon()
 
     -- Event subscriptions
-    HH.Events:On("HEROHELPER_TRIGGER",   function() RB:Show() end)
-    HH.Events:On("COMBAT_END",           function() RB:Hide() end)
-    HH.Events:On("PLAYER_LOGIN",         function()
-        RB:RefreshMacro()
-        RB:MaybeShowFirstLoginHint()
-    end)
-    HH.Events:On("PLAYER_ENTERING_WORLD", function() RB:RefreshMacro() end)
+    HH.Events:On("HEROHELPER_TRIGGER",     function() RB:Show() end)
+    HH.Events:On("COMBAT_END",             function() RB:Hide() end)
+    HH.Events:On("PLAYER_LOGIN",           function() RB:RefreshIcon() end)
+    HH.Events:On("PLAYER_ENTERING_WORLD",  function() RB:RefreshIcon() end)
     HH.Events:On("PLAYER_AURA_CHANGED", function()
         if HH.chardb.settings.hideOnDebuff and HH:HasExhaustionDebuff() then
             RB:Hide()
@@ -327,29 +260,20 @@ end
 
 function RB:ApplyLock()
     if not container then return end
-    -- Lock state only affects whether drag-to-move is allowed. Cast
-    -- arming is decoupled — it's always available via the user's
-    -- keybind on the HeroHelperCast macro.
+    -- The lock flag is purely visual policy (drag-to-move allowed /
+    -- blocked). Nothing cast-related hangs off it; the addon doesn't
+    -- cast for you, the reminder is just a visual indicator.
     container:SetMovable(true) -- always movable; OnDragStart gates it
 end
 
--- Refreshes the HeroHelperCast macro body (out of combat) so it matches
--- the player's current spell / user override. Also refreshes the icon
--- overlay. Called on init, PLAYER_LOGIN, PLAYER_ENTERING_WORLD, and
--- whenever the user changes macrotext in settings.
-function RB:RefreshMacro()
-    if InCombatLockdown() then return end
-    EnsureMacro()
+-- Refreshes the icon to the correct faction-aware spell texture.
+-- Called on init and on PLAYER_LOGIN / PLAYER_ENTERING_WORLD so the
+-- icon settles after GetSpellInfo returns a valid value.
+function RB:RefreshIcon()
     if HH.State.spellID and container and container.icon then
         local tex = select(3, GetSpellInfo(HH.State.spellID))
         if tex then container.icon:SetTexture(tex) end
     end
-end
-
--- Kept for backwards compatibility with existing callers (Config panel,
--- slash commands). Semantically now the same as RefreshMacro.
-function RB:ApplyMacrotext()
-    self:RefreshMacro()
 end
 
 -- ============================================================================
@@ -405,25 +329,6 @@ end
 
 function RB:TestShow()
     self:ToggleTestMode()
-end
-
--- ============================================================================
--- First-login hint
--- ============================================================================
--- The first time a shaman loads the addon after this refactor, prompt
--- them to set a keybind. The hint is sticky via a SavedVariables flag
--- so it only appears once per character.
-
-function RB:MaybeShowFirstLoginHint()
-    if not HH.chardb.settings then return end
-    if HH.chardb.settings.keybindHintShown then return end
-    HH.chardb.settings.keybindHintShown = true
-
-    HH:Print("Casting is via your own keybind - bind a key to the " ..
-             HH.Colors.highlight .. MACRO_NAME .. "|r " ..
-             HH.Colors.info .. "macro in " ..
-             HH.Colors.highlight .. "Escape > Key Bindings > Macros|r.",
-             HH.Colors.info)
 end
 
 -- ============================================================================

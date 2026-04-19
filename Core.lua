@@ -125,9 +125,9 @@ local defaultDB = {
 local defaultCharDB = {
     -- Per-character settings (reminder position, size, sound, etc.)
     settings = {
-        -- Visual reminder frame. Not a secure action button; purely a
-        -- positioning / visibility anchor for the icon + pulse overlay.
-        -- Casting is via the user's keybind on the HeroHelperCast macro.
+        -- Visual reminder frame. Purely informational — not a secure
+        -- action button, no casting machinery attached. Icon + pulse
+        -- overlay that pops when it's time to cast BL/Hero.
         button = {
             -- Locked = drag-to-move disabled. Set false (or toggle
             -- /hh unlock) to drag the reminder to a new screen position.
@@ -145,10 +145,6 @@ local defaultCharDB = {
         -- "sound" key (shared with ShamanPower etc.) or nil.
         sound          = "Raid Warning",
         soundEnabled   = true,
-        -- Custom body for the HeroHelperCast macro. If nil or "", we use
-        -- the default "/cast [@player] <spell>". Useful for adding
-        -- /stopcasting, /use item, /targetlasttarget, etc.
-        macrotext      = nil,
         -- Automatically hide reminder as soon as BL/Hero debuff is detected
         -- on the player (prevents it lingering after a cast).
         hideOnDebuff   = true,
@@ -156,9 +152,6 @@ local defaultCharDB = {
         postCastFade   = 2,
         -- Minimum seconds between showing the reminder twice on the same pull
         reminderCooldown = 30,
-        -- Set once we've shown the user the first-login keybind-setup hint.
-        -- Persisted so the hint appears on a given character only once.
-        keybindHintShown = false,
     },
 
     -- Per-boss trigger overrides.
@@ -612,6 +605,4 @@ SlashCmdList["HEROHELPER"] = function(msg)
     HH:Print("  /hh mobtest [%]        - fire reminder when target drops below HP% (default 50)")
     HH:Print("  /hh mobtest pull       - fire reminder on the next combat start")
     HH:Print("  /hh debug              - toggle debug output")
-    HH:Print("Cast via the " .. HH.Colors.highlight .. "HeroHelperCast|r " .. HH.Colors.info ..
-             "macro - bind a key via Escape > Key Bindings > Macros.", HH.Colors.info)
 end

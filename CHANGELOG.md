@@ -1,5 +1,27 @@
 # HeroHelper - TBC Anniversary Edition - Changelog
 
+## v2.0.1
+
+### Changed
+
+- **`HeroHelperCast` auto-macro removed.** The reminder is purely a
+  timing indicator now — the addon does not create, maintain, or
+  reference any macro. Cast Heroism / Bloodlust the way you already
+  do (action bar, keybind, your own macro, whatever). If v2.0.0 left
+  a `HeroHelperCast` macro in your macro list, it's safe to delete
+  manually; the addon no longer looks for it.
+- Settings: `macrotext` override and `keybindHintShown` flag dropped
+  from the per-character defaults — unused.
+- Reminder tooltip simplified: just the boss name + "Drag to move"
+  when unlocked. No more instructions to bind a key.
+- First-login chat hint removed.
+- Slash-command help no longer mentions the macro.
+
+### Fixed
+
+- README and in-game docs that were still telling users to bind a
+  key to a macro that no longer exists.
+
 ## v2.0.0
 
 Major refactor driven by a click-through bug that burned a Shaman on
@@ -10,12 +32,12 @@ coordination works, and how trigger conditions are evaluated.
 
 ### Breaking
 
-- **The reminder no longer casts on click.** It's now a purely visual
-  indicator. Casting happens via a keybind you set on the auto-created
-  `HeroHelperCast` macro. This permanently fixes the click-through bug
-  — there's no clickable surface left that could miscast onto an
-  occluded raid frame. Set a key once in Escape > Key Bindings >
-  Macros, press it when the reminder pops.
+- **The reminder no longer casts.** It's now a purely informational
+  indicator. You cast Heroism / Bloodlust the way you already do —
+  action bar, keybind, personal macro, whatever. HeroHelper just tells
+  you *when*. This permanently fixes the click-through bug — there's
+  no cast machinery in the addon at all, so nothing can miscast onto
+  an occluded raid frame.
 - **Phase trigger type removed.** Yell-based phase detection was
   unreliable, especially on Magtheridon where the "I am... unleashed!"
   yell fires before Detection identifies the boss. All phase-based
@@ -50,11 +72,6 @@ coordination works, and how trigger conditions are evaluated.
 
 ### New
 
-- **`HeroHelperCast` macro.** Auto-created per character with body
-  `/cast [@player] <spell>` (Heroism or Bloodlust depending on
-  faction). Refreshed on every login to stay in sync. Bind a key to
-  it in Escape > Key Bindings > Macros. A one-shot first-login chat
-  hint points to the setup step.
 - **`/hh roster lock | unlock`.** Manual roster control. `/hh roster`
   (no subcommand) prints current state. Locking snapshots the live
   roster, runs the election (lowest priority alive, alphabetical
