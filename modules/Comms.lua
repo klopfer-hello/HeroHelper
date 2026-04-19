@@ -1,37 +1,32 @@
 --[[
     HeroHelper - Comms Module
 
-    Multi-shaman coordination via the addon-message channel. Built on a
-    roster-based election: every HeroHelper user in the group is in a
-    shared roster, the lowest-priority alive shaman is the elected
-    "lust shaman", and ONLY that one shaman's HeroHelper produces
-    reminders. Everyone else stays completely silent.
+    Manual multi-shaman coordination over the addon-message channel.
 
-    Lifecycle:
+    Design (user-controlled, no automation):
 
-      Group forms / players zone in
-        -> each HeroHelper user broadcasts HELLO:<priority>
-        -> rosters converge across all clients
-      Group reaches the instance's expected size (GetInstanceInfo's
-      maxPlayers — 5 for any 5-man dungeon, 10 for Kara/ZA, 25 for
-      the larger raids)
-        -> live roster is SNAPSHOTTED into a locked roster
-        -> the elected winner posts the order to raid/party chat
-           ONCE
-        -> late joiners after lock are NOT added to the locked
-           roster; the order is fixed for the duration of the run
-      During the run
-        -> only the elected winner's TryFire actually fires
-        -> if the elected winner dies, the next-priority alive
-           shaman in the locked roster silently takes over (no
-           further chat messages)
-      Player leaves the instance or the group disbands
-        -> lock is dropped, live roster takes over again
-
-    Pre-lock (group not yet full) and outside any instance both fall
-    back to the live roster: AmIElectedWinner runs the same election
-    against `roster` + alive check every TryFire. Same code path, no
-    special "5-man vs raid" mode.
+      * Every HeroHelper user broadcasts HELLO when the group roster
+        changes. Each client maintains a live roster of the other
+        HeroHelper-using shamans in the group and their role priorities.
+      * **Without an active lock, every shaman gets their own reminder.**
+        No election, no suppression. AmIElectedWinner returns true.
+      * The raid leader (or any user) types `/hh roster lock` when they
+        want to freeze the hero order. That:
+            - Snapshots the live roster into a locked roster.
+            - Runs the election once (lowest priority alive, alphabetical
+              tiebreak) to pick the primary fire-er.
+            - Announces the resolved order to raid/party chat once.
+            - From now on, only the elected-winner's HeroHelper fires;
+              every other HeroHelper-using shaman suppresses its
+              reminder for the rest of the run.
+      * Alive-aware fallback: the election is re-evaluated against the
+        locked roster every time a reminder is about to fire, so if
+        the primary dies mid-fight the secondary's HeroHelper takes
+        over, and if the secondary also dies the backup fires. Order
+        is determined by role priority, not by the current
+        HEROHELPER_TRIGGER event.
+      * `/hh roster unlock` drops the lock — everyone goes back to
+        firing their own reminder.
 
     Protocol (CHAT_MSG_ADDON, prefix "HEROHELPER"):
 
@@ -40,9 +35,9 @@
              My player name is implicit from the addon-message sender."
 
     Priority numbers:
-       1 = Primary    (always casts when alive)
-       2 = Secondary  (casts if Primary is dead)
-       3 = Backup     (casts if Primary and Secondary are dead)
+       1 = Primary    (elected when alive)
+       2 = Secondary  (elected if Primary is dead)
+       3 = Backup     (elected if Primary and Secondary are dead)
       99 = Auto       (no explicit role; alphabetical fallback)
 ]]
 
@@ -56,23 +51,17 @@ local ADDON_PREFIX = "HEROHELPER"
 local PRIORITY_AUTO = 99
 
 -- Live roster: HELLO-discovered HeroHelper users currently in the group.
--- Maintained continuously regardless of mode.
+-- Maintained continuously so `/hh roster lock` has an up-to-date snapshot.
 local roster = {}                  -- name -> priority
 
--- Locked roster: snapshot of `roster` taken when the raid hit expected
--- size for the first time. nil while in live mode. When non-nil, the
--- election runs against this fixed snapshot — late joiners are not
--- added, and the order is preserved for the duration of the raid.
+-- Locked roster: snapshot of `roster` taken by C:Lock(). nil when no
+-- lock is active. When non-nil, the election runs against this fixed
+-- snapshot — late joiners are not added until the next manual lock.
 local lockedRoster = nil           -- name -> priority OR nil
 
--- Tracks whether we've already posted the "this is the order" chat
--- message for the current lock. One announcement per lock cycle.
-local lockedAnnounced = false
-
--- Debounce flags so a burst of GROUP_ROSTER_UPDATE events coalesces
--- into one HELLO broadcast and one lock attempt.
-local pendingHello       = false
-local pendingLockAttempt = false
+-- Debounce flag so a flurry of GROUP_ROSTER_UPDATE events coalesces
+-- into one HELLO broadcast.
+local pendingHello = false
 
 -- ============================================================================
 -- Helpers
@@ -138,38 +127,13 @@ local function SendAddonMsg(message, channel)
     return false
 end
 
--- Returns the current instance's expected group size from GetInstanceInfo,
--- or nil if we're not in a raid or party (5-man) instance. Used to know
--- when to lock the election. Excludes "pvp" and "arena" so the lock /
--- chat announcement doesn't fire in battlegrounds.
-local function GetExpectedGroupSize()
-    if not GetInstanceInfo then return nil end
-    local _, instanceType, _, _, maxPlayers = GetInstanceInfo()
-    if instanceType ~= "raid" and instanceType ~= "party" then return nil end
-    if not maxPlayers or maxPlayers <= 0 then return nil end
-    return maxPlayers
-end
-
--- Returns the current actual group size.
-local function GetCurrentGroupSize()
-    local n = (GetNumRaidMembers and GetNumRaidMembers() or 0)
-    if n == 0 and IsInRaid and IsInRaid() then
-        n = (GetNumGroupMembers and GetNumGroupMembers() or 0)
-    end
-    if n == 0 then
-        n = (GetNumPartyMembers and GetNumPartyMembers() or 0)
-        if n > 0 then n = n + 1 end -- party count excludes self
-    end
-    return n
-end
-
 -- ============================================================================
 -- Roster maintenance
 -- ============================================================================
 
 -- Removes live-roster entries for players no longer in the group. The
--- locked roster is intentionally NOT pruned — once locked, the order
--- stands for the duration of the raid.
+-- locked roster is intentionally NOT pruned — the order stands until
+-- /hh roster unlock.
 local function PruneLiveRoster()
     local me = BareName(UnitName("player"))
     local inGroup = {}
@@ -201,12 +165,6 @@ local function PruneLiveRoster()
     end
 end
 
--- Returns the roster currently used for elections: locked snapshot if
--- one exists, otherwise the live roster.
-local function GetActiveRoster()
-    return lockedRoster or roster
-end
-
 -- Picks the elected winner from the given roster, filtered by alive
 -- status. Lowest priority wins; ties broken alphabetically. Returns
 -- the bidder table { name, priority } or nil if everyone is dead.
@@ -225,7 +183,8 @@ local function ElectFrom(srcRoster)
 end
 
 -- Returns a roster sorted by priority (then alphabetical) — the order
--- in which ElectFrom walks. Used by the chat announcement.
+-- in which ElectFrom walks. Used by the chat announcement and the
+-- /hh roster diagnostic.
 local function SortedRoster(srcRoster)
     local sorted = {}
     for name, priority in pairs(srcRoster) do
@@ -242,46 +201,36 @@ end
 -- Public API
 -- ============================================================================
 
--- Returns true if THIS player should fire reminders. Used by Triggers.lua
--- to decide whether to suppress its TryFire.
+-- Returns true if THIS player should fire reminders.
+--   * No lock in effect → everyone fires (return true).
+--   * Lock in effect → only the currently-elected (alive) winner fires.
+--     Election re-evaluates on every call, so alive-aware fallback is
+--     automatic (primary dies → secondary fires → backup fires).
 function C:AmIElectedWinner()
-    if not (HH.db and HH.db.settings and HH.db.settings.coordinateShamans) then
+    if not lockedRoster then
         return true
-    end
-    if not GetGroupChannel() then
-        return true -- solo
     end
 
     local me = BareName(UnitName("player"))
     if not me then return true end
 
-    local active = GetActiveRoster()
-
-    -- Empty roster (we're alone with no other HH users discovered yet)
-    -- means we trivially win. We're always in our own live roster (added
-    -- in BroadcastHello), so this only triggers in degenerate cases.
-    local count = 0
-    for _ in pairs(active) do count = count + 1 end
-    if count == 0 then return true end
-
-    local winner = ElectFrom(active)
+    local winner = ElectFrom(lockedRoster)
     if not winner then
-        -- Everyone alive in the active roster is gone. Fall through and
-        -- fire as a last resort — IsReady's own checks will block it if
-        -- the player is dead too.
+        -- Everyone in the locked roster is dead. Fall through and fire
+        -- as a last resort — IsReady's own checks will block it if the
+        -- player is dead too.
         return true
     end
     return winner.name == me
 end
 
--- Returns the locked roster (or live roster if not locked) sorted by
--- priority, for the /hh roster diagnostic command.
 function C:GetActiveRosterSorted()
-    return SortedRoster(GetActiveRoster())
+    return SortedRoster(lockedRoster or roster)
 end
 
 function C:GetElectedWinner()
-    local w = ElectFrom(GetActiveRoster())
+    if not lockedRoster then return nil end
+    local w = ElectFrom(lockedRoster)
     return w and w.name or nil
 end
 
@@ -293,10 +242,10 @@ end
 -- Chat announcement
 -- ============================================================================
 
--- Posts the resolved Heroism order to raid/party chat using the active
--- roster. Called exactly once per raid lock cycle, by the elected winner.
+-- Posts the resolved Heroism order to raid/party chat using the locked
+-- roster. Called exactly once by the player who ran /hh roster lock.
 local function PostOrderToChat()
-    local sorted = SortedRoster(GetActiveRoster())
+    local sorted = SortedRoster(lockedRoster or {})
     if #sorted == 0 then return end
 
     local channel = GetGroupChannel()
@@ -321,67 +270,48 @@ local function PostOrderToChat()
 end
 
 -- ============================================================================
--- Lock / unlock
+-- Lock / unlock  (user-driven via /hh roster lock | unlock)
 -- ============================================================================
 
-local function ShouldLock()
-    if lockedRoster then return false end
-    local expected = GetExpectedGroupSize()
-    if not expected then return false end
-    return GetCurrentGroupSize() >= expected
-end
+-- Snapshots the current live roster, runs the election, and announces
+-- the resolved order to chat. Returns (ok, reason) — false + reason
+-- string on failure so the slash command can report to the player.
+function C:Lock()
+    if lockedRoster then
+        return false, "already locked - run `/hh roster unlock` first"
+    end
+    if not GetGroupChannel() then
+        return false, "not in a group"
+    end
 
-local function MaybeLock()
-    if not ShouldLock() then return end
+    PruneLiveRoster()
 
-    -- Snapshot the live roster.
-    lockedRoster = {}
     local count = 0
+    local snapshot = {}
     for name, p in pairs(roster) do
-        lockedRoster[name] = p
+        snapshot[name] = p
         count = count + 1
     end
-    lockedAnnounced = false
+    if count == 0 then
+        return false, "no HeroHelper users discovered yet - wait a moment and retry"
+    end
 
+    lockedRoster = snapshot
     HH:Debug(("Coordinate: election LOCKED with %d HeroHelper user(s)"):format(count))
 
-    -- Run election against the locked snapshot and announce ONCE.
-    if HH.db and HH.db.settings and HH.db.settings.announceCoordination then
-        local me = BareName(UnitName("player"))
-        local winner = ElectFrom(lockedRoster)
-        if winner and winner.name == me and not lockedAnnounced then
-            lockedAnnounced = true
-            PostOrderToChat()
-        elseif winner then
-            -- Mark as announced even if we're not the announcer, so
-            -- subsequent re-checks don't try to announce again from
-            -- this client.
-            lockedAnnounced = true
-        end
-    end
+    -- Only the user who ran /hh roster lock posts the order. The locking
+    -- player's HELLO priority is irrelevant for announcement duty.
+    PostOrderToChat()
+    return true
 end
 
-local function Unlock()
-    if not lockedRoster then return end
-    lockedRoster = nil
-    lockedAnnounced = false
-    HH:Debug("Coordinate: election UNLOCKED")
-end
-
--- Called on group / zone changes. Decides whether to keep / drop / set
--- the locked snapshot based on whether we're still in a raid or party
--- instance with a known expected size.
-local function ReconcileLockState()
-    local expected = GetExpectedGroupSize()
-    if not expected then
-        -- No longer in a raid/party instance — drop any existing lock.
-        Unlock()
-        return
-    end
-    -- We're in an instance; if not yet locked, try to lock now.
+function C:Unlock()
     if not lockedRoster then
-        MaybeLock()
+        return false, "not currently locked"
     end
+    lockedRoster = nil
+    HH:Debug("Coordinate: election UNLOCKED")
+    return true
 end
 
 -- ============================================================================
@@ -416,17 +346,6 @@ local function ScheduleHello()
     end)
 end
 
--- Schedules a lock attempt with debounce so a flurry of GROUP_ROSTER_UPDATE
--- events at raid form-up coalesce into a single lock decision.
-local function ScheduleLockAttempt()
-    if pendingLockAttempt then return end
-    pendingLockAttempt = true
-    C_Timer.After(2, function()
-        pendingLockAttempt = false
-        ReconcileLockState()
-    end)
-end
-
 local function HandleHello(senderName, priority)
     local me = BareName(UnitName("player"))
     if not me or senderName == me then return end
@@ -436,11 +355,6 @@ local function HandleHello(senderName, priority)
     if prev ~= priority then
         HH:Debug(("Coordinate: HELLO from %s (priority=%d)"):format(senderName, priority))
     end
-
-    -- A late HELLO during raid form-up may push the locked decision
-    -- forward (we now know about another HH user). The lock attempt is
-    -- debounced and idempotent.
-    ScheduleLockAttempt()
 end
 
 -- ============================================================================
@@ -470,21 +384,10 @@ function C:Initialize()
     HH.Events:On("PLAYER_ENTERING_WORLD", function()
         PruneLiveRoster()
         ScheduleHello()
-        ScheduleLockAttempt()
     end)
 
     HH.Events:On("GROUP_ROSTER_UPDATE", function()
         PruneLiveRoster()
         ScheduleHello()
-        -- A composition change can either trigger a fresh lock (we just
-        -- hit expected size) or invalidate the current one (we left the
-        -- instance). ReconcileLockState handles both — but go through
-        -- the debounce so a burst of events coalesces.
-        ScheduleLockAttempt()
-        if lockedRoster and not GetExpectedGroupSize() then
-            -- Player just left the instance; unlock immediately without
-            -- waiting for the debounce so the live roster takes over.
-            Unlock()
-        end
     end)
 end

@@ -58,14 +58,16 @@ Click **Export** to copy your settings as a share string and send them to the re
 
 ### Coordinating with other shamans
 
-If your raid has more than one shaman with HeroHelper, set your **role** in the General tab:
+By default, every HeroHelper-using shaman fires their own reminder. When you want to lock in who Heroes, someone types `/hh roster lock` — that freezes the current roster, announces the resolved order to group chat, and from then on only the elected shaman's reminder fires. If that shaman dies mid-fight, the reminder automatically jumps to the next-priority alive shaman (Primary > Secondary > Backup).
 
-- **Primary** — you're the designated Heroist; the reminder always pops for you first.
-- **Secondary** — the reminder only pops if the Primary is dead.
-- **Backup** — fires if both Primary and Secondary are dead.
-- **Auto** — no explicit role; HeroHelper picks one shaman per pull automatically.
+Each shaman sets their **role** in the General tab before the lock:
 
-The other shamans see *"Heroism deferred to <name>"* in chat when their reminder is suppressed. If your Primary dies before the pull resolves, the Secondary's reminder pops automatically.
+- **Primary** — elected first when alive.
+- **Secondary** — elected if Primary is dead.
+- **Backup** — elected if Primary and Secondary are dead.
+- **Auto** — no explicit role; alphabetical tiebreak only.
+
+Type `/hh roster unlock` to drop the lock and go back to everyone firing independently. `/hh roster` on its own shows the current state — locked or live, roster contents, and the current elected winner.
 
 ---
 
@@ -79,6 +81,9 @@ The other shamans see *"Heroism deferred to <name>"* in chat when their reminder
 | `/hh mobtest pull` | Test the pull-trigger flow on the next mob you engage |
 | `/hh lock` / `/hh unlock` | Lock or unlock the reminder in place |
 | `/hh reset` | Move the reminder back to screen center |
+| `/hh roster` | Show the current multi-shaman roster and whether it's locked |
+| `/hh roster lock` | Freeze the hero order, announce it to the group, suppress non-winners |
+| `/hh roster unlock` | Release the lock; every shaman fires independently again |
 | `/hh debug` | Toggle verbose chat output (for troubleshooting) |
 
 ---

@@ -585,22 +585,12 @@ function Config:BuildGeneralTab(panel)
     end)
     y = y - ROW_HEIGHT
 
-    -- Multi-shaman coordination toggle. When on, every reminder fires
-    -- through a 500ms coordination window with other HeroHelper-using
-    -- shamans in the group; lowest-priority alive bidder wins. See the
-    -- Comms module for the addon-message protocol.
-    local cbCoordinate = MakeCheckbox(panel, "Coordinate with other shamans (multi-Hero raids)")
-    cbCoordinate:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, y)
-    cbCoordinate:HookClick(function(checked)
-        HH.db.settings.coordinateShamans = checked
-    end)
-    y = y - ROW_HEIGHT
-
-    -- Coordination role picker. Lower priority wins the bid; the alive
-    -- check at fire time means a primary who dies during the pull
-    -- automatically yields to the secondary, etc. "Auto" treats the
-    -- player as a generic bidder (priority 99) and lets alphabetical
-    -- name precedence pick the winner.
+    -- Role picker. Only consulted when someone in the raid runs
+    -- `/hh roster lock`; lower priority wins the lock's election,
+    -- and the alive-check at fire time means Primary > Secondary >
+    -- Backup as deaths happen mid-fight. "Auto" means alphabetical
+    -- tiebreak. Without a lock, every HeroHelper-using shaman fires
+    -- their own reminder independently.
     local roleLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     roleLabel:SetPoint("TOPLEFT", panel, "TOPLEFT", 18, y - 2)
     roleLabel:SetText("My role:")
@@ -626,17 +616,13 @@ function Config:BuildGeneralTab(panel)
     roleDD:SetPoint("LEFT", roleLabel, "RIGHT", 4, -2)
     y = y - ROW_HEIGHT - 6
 
-    -- Raid-chat announcement of the resolved Heroism order. Posted
-    -- exactly ONCE when the group reaches the instance's expected
-    -- size (5 for 5-mans, 10 for Kara/ZA, 25 for the larger raids)
-    -- and the election locks. Silent for the rest of the run, even on
-    -- mid-fight winner changes when the primary dies.
-    local cbAnnounce = MakeCheckbox(panel, "Announce Heroism order in raid chat")
-    cbAnnounce:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, y)
-    cbAnnounce:HookClick(function(checked)
-        HH.db.settings.announceCoordination = checked
-    end)
-    y = y - ROW_HEIGHT
+    -- Short hint pointing at the /hh roster lock workflow.
+    local rosterHint = panel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    rosterHint:SetPoint("TOPLEFT", panel, "TOPLEFT", 18, y)
+    rosterHint:SetWidth(FRAME_WIDTH - 36)
+    rosterHint:SetJustifyH("LEFT")
+    rosterHint:SetText("Use /hh roster lock in raid to freeze the hero order and announce it.")
+    y = y - 18
 
     y = y - 8
     SectionHeader("REMINDER BUTTON")
@@ -738,11 +724,9 @@ function Config:BuildGeneralTab(panel)
         cbEnabled:SetChecked(HH.db.settings.enabled)
         cbMinimap:SetChecked(HH.db.settings.showMinimap ~= false)
         cbDungeons:SetChecked(HH.db.settings.dungeonPullAlerts == true)
-        cbCoordinate:SetChecked(HH.db.settings.coordinateShamans ~= false)
         if roleDD and roleDD.RefreshText then
             roleDD:RefreshText(RoleLabelFor(HH.db.settings.shamanPriority or 99))
         end
-        cbAnnounce:SetChecked(HH.db.settings.announceCoordination == true)
         cbLocked:SetChecked(HH.chardb.settings.button.locked)
         cbSoundEnabled:SetChecked(HH.chardb.settings.soundEnabled)
         cbTest:SetChecked(HH.ReminderButton and HH.ReminderButton:IsTestMode() or false)

@@ -106,31 +106,19 @@ local defaultDB = {
         -- individual dungeon bosses can still be overridden via the
         -- Bosses config tab like raid bosses.
         dungeonPullAlerts = false,
-        -- Multi-shaman coordination over the addon-message channel. When
-        -- ON, every reminder fire goes through a 500ms grace window in
-        -- which other HeroHelper-using shamans can claim the pull; the
-        -- lowest-priority player who's still alive wins and the others
-        -- suppress their reminder. See modules/Comms.lua for the
-        -- protocol details. Defaults to ON because it has zero cost
-        -- when solo (no group, no broadcast, no delay).
-        coordinateShamans = true,
-        -- Coordination role within the shaman group. Lower priorities
-        -- win the bid; ties broken alphabetically by name. The "alive"
-        -- check at fire time means a primary who dies during the pull
-        -- automatically yields to the secondary, etc.
-        --   1  = Primary    (always casts when alive)
-        --   2  = Secondary  (casts if primary is dead)
-        --   3  = Backup     (casts if primary and secondary are dead)
+        -- Role used at `/hh roster lock` time to decide who fires the
+        -- reminder when multiple HeroHelper-using shamans are in the
+        -- raid. Lower priority wins the election; ties break
+        -- alphabetically. The "alive" check at fire time means a
+        -- primary who dies mid-fight yields to the secondary, and a
+        -- dead secondary yields to the backup.
+        --   1  = Primary    (fires while alive)
+        --   2  = Secondary  (fires if Primary is dead)
+        --   3  = Backup     (fires if Primary and Secondary are dead)
         --   99 = Auto       (no explicit role; alphabetical fallback)
+        -- Has no effect until someone types `/hh roster lock` — without
+        -- a lock, every HeroHelper-using shaman fires independently.
         shamanPriority = 99,
-        -- Post a one-line raid-chat announcement when coordination
-        -- resolves: "HeroHelper: <chosen> will Heroism. Order: a > b > c".
-        -- Only the chosen winner actually sends the message — every
-        -- HeroHelper instance computes the same winner deterministically
-        -- from the same bidder list, so the message naturally
-        -- deduplicates across the raid. Default off because it adds
-        -- chat noise; opt in via /hh General when the raid wants it.
-        announceCoordination = false,
     },
 }
 
@@ -529,14 +517,44 @@ SlashCmdList["HEROHELPER"] = function(msg)
         return
     end
 
-    -- /hh roster — dumps the current Comms roster for diagnostics. Shows
-    -- whether the raid lock is active, who is in the (locked or live)
-    -- roster, what their priorities are, and who is the elected winner.
-    if msg == "roster" then
+    -- /hh roster              - show the current roster state
+    -- /hh roster lock         - freeze the hero order and announce it to
+    --                           group chat. Until unlocked, only the
+    --                           elected winner's HeroHelper fires; if
+    --                           the winner dies the next-priority alive
+    --                           shaman takes over (Primary > Secondary >
+    --                           Backup). Without a lock, every shaman's
+    --                           HeroHelper fires independently.
+    -- /hh roster unlock       - drop the lock; back to "everyone fires".
+    if msg == "roster" or msg:match("^roster%s") then
         if not (HH.Comms and HH.Comms.GetActiveRosterSorted) then
             HH:Print("Coordination module not loaded.", HH.Colors.warning)
             return
         end
+
+        local sub = msg:match("^roster%s+(%S+)$")
+
+        if sub == "lock" then
+            local ok, err = HH.Comms:Lock()
+            if ok then
+                HH:Print("Roster locked. Heroism order announced to group chat.", HH.Colors.success)
+            else
+                HH:Print("Roster lock failed: " .. tostring(err), HH.Colors.warning)
+            end
+            return
+        end
+
+        if sub == "unlock" then
+            local ok, err = HH.Comms:Unlock()
+            if ok then
+                HH:Print("Roster unlocked. Every HeroHelper user now fires independently.", HH.Colors.success)
+            else
+                HH:Print("Roster unlock: " .. tostring(err), HH.Colors.warning)
+            end
+            return
+        end
+
+        -- No subcommand (or unrecognized): print state.
         local sorted = HH.Comms:GetActiveRosterSorted()
         local locked = HH.Comms:IsLocked()
         local winner = HH.Comms:GetElectedWinner()
@@ -547,11 +565,16 @@ SlashCmdList["HEROHELPER"] = function(msg)
         else
             local roleNames = { [1] = "Primary", [2] = "Secondary", [3] = "Backup", [99] = "Auto" }
             for i, b in ipairs(sorted) do
-                local marker = (b.name == winner) and " [ACTIVE]" or ""
+                local marker = (locked and b.name == winner) and " [ACTIVE]" or ""
                 HH:Print(("  %d. %s - %s%s"):format(
                     i, b.name, roleNames[b.priority] or ("priority " .. b.priority),
                     marker), HH.Colors.info)
             end
+        end
+        if not locked then
+            HH:Print("Use `/hh roster lock` to freeze the hero order.", HH.Colors.info)
+        else
+            HH:Print("Use `/hh roster unlock` to release the lock.", HH.Colors.info)
         end
         return
     end
@@ -569,13 +592,16 @@ SlashCmdList["HEROHELPER"] = function(msg)
     end
 
     HH:Print("Commands:", HH.Colors.highlight)
-    HH:Print("  /hh             - open options")
-    HH:Print("  /hh lock | unlock - lock/unlock the reminder in place")
-    HH:Print("  /hh reset       - reset reminder position")
-    HH:Print("  /hh test        - toggle test mode (reminder stays visible for positioning)")
-    HH:Print("  /hh mobtest [%]    - fire reminder when target drops below HP% (default 50)")
-    HH:Print("  /hh mobtest pull   - fire reminder on the next combat start")
-    HH:Print("  /hh debug       - toggle debug output")
+    HH:Print("  /hh                    - open options")
+    HH:Print("  /hh lock | unlock      - lock/unlock the reminder in place")
+    HH:Print("  /hh reset              - reset reminder position")
+    HH:Print("  /hh test               - toggle test mode (reminder stays visible for positioning)")
+    HH:Print("  /hh roster             - show the current multi-shaman roster")
+    HH:Print("  /hh roster lock        - freeze hero order, announce to group, suppress non-winners")
+    HH:Print("  /hh roster unlock      - release the lock; every shaman fires independently again")
+    HH:Print("  /hh mobtest [%]        - fire reminder when target drops below HP% (default 50)")
+    HH:Print("  /hh mobtest pull       - fire reminder on the next combat start")
+    HH:Print("  /hh debug              - toggle debug output")
     HH:Print("Cast via the " .. HH.Colors.highlight .. "HeroHelperCast|r " .. HH.Colors.info ..
              "macro - bind a key via Escape > Key Bindings > Macros.", HH.Colors.info)
 end
