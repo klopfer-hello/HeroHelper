@@ -37,7 +37,6 @@ Internal events:
 | `COMBAT_END` | Core (`PLAYER_REGEN_ENABLED`) | - |
 | `TARGET_CHANGED` | Core (`PLAYER_TARGET_CHANGED`) | - |
 | `MOUSEOVER_CHANGED` | Core (`UPDATE_MOUSEOVER_UNIT`) | - |
-| `BOSS_YELL` | Core (`CHAT_MSG_MONSTER_YELL` / RAID_BOSS_EMOTE / WHISPER) | `text, source` |
 | `CLEU` | Core (`COMBAT_LOG_EVENT_UNFILTERED`) | `CombatLogGetCurrentEventInfo()` values |
 | `COOLDOWN_CHANGED` | Core (`SPELL_UPDATE_COOLDOWN`) | - |
 | `PLAYER_AURA_CHANGED` | Core (`UNIT_AURA` for player) | - |
@@ -72,7 +71,9 @@ HH.State = {
 3. Triggers module reads the per-boss config via `Database:GetTriggerConfig(bossID)`:
     - `type == "pull"`  → fire immediately
     - `type == "hp"`    → start a 250 ms poll ticker until HP% ≤ threshold
-    - `type == "phase"` → advance a phase counter via `BOSS_YELL` events, fire when counter ≥ configured phase
+    - `type == "time"`  → schedule a one-shot timer for `seconds` after pull
+    - `type == "any"`   → compound; arm each sub-condition in parallel and fire on the first to satisfy
+    - `type == "skip"`  → never fire for this boss
 4. Before firing, Triggers checks:
     - addon enabled
     - player is shaman

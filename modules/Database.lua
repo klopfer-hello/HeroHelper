@@ -16,17 +16,19 @@
                        Kael'thas in TK 550 vs MgT 585). Obtained at runtime
                        via select(8, GetInstanceInfo()) — locale-independent.
         default     -- default trigger config for this boss:
-                         { type = "pull"  }                   -> cast on pull
-                         { type = "hp",  hp = 35 }            -> cast at <= 35% HP
-                         { type = "phase", phase = 2 }        -> cast on phase
-        yells       -- optional table mapping phase index -> list of yell
-                       pattern strings used to advance phase detection. Each
-                       value is a list so multiple translations can be added:
-                         { [2] = { "English yell", "German yell" } }
-                       The Triggers module matches any string in the list.
+                         { type = "pull"  }                     -> cast on pull
+                         { type = "hp",  hp = 35 }              -> cast at <= 35% HP
+                         { type = "time", seconds = 30 }        -> cast N seconds in
+                         { type = "any", conditions = { ... } } -> fire on the first
+                                                                   of multiple sub-conditions
 
     The per-character saved variables store *overrides* (HH.chardb.bosses[id]).
     Any missing key falls back to this table's defaults.
+
+    (Phase-yell detection used to exist as a trigger type but was removed —
+    Detection couldn't reliably catch the relevant yell before the boss was
+    identified, especially on Magtheridon. HP-based thresholds and time
+    triggers replace it.)
 ]]
 
 local ADDON_NAME, HH = ...
@@ -111,8 +113,7 @@ DB.KILL_ORDER = {
 -- Default triggers are picked from common Shaman raid practice:
 --   * trash-adjacent DPS checks / short execute fights -> "pull"
 --   * long progression bosses                          -> "hp" at a value where
---                                                         burn phase starts
---   * phased fights with a clear burn phase entry      -> "phase" with yell
+--                                                         the burn phase starts
 --   * fights with a known sweet spot N seconds in      -> "time", seconds = N
 --
 -- Compound (any-of) triggers are also supported via:
@@ -120,16 +121,15 @@ DB.KILL_ORDER = {
 --     default = {
 --         type = "any",
 --         conditions = {
---             { type = "phase", phase = 3 },
---             { type = "hp",    hp    = 25 },
---             { type = "time",  seconds = 90 },
+--             { type = "hp",   hp = 25 },
+--             { type = "time", seconds = 90 },
 --         },
 --     },
 --
 -- The first condition that fires wins (HH.State.triggered latches the
--- whole reminder so the others silently no-op). Useful as a fallback when
--- yell-based phase detection is unreliable: pair "phase" with an "hp" or
--- "time" safety net so you never miss the window.
+-- whole reminder so the others silently no-op). Useful for phased fights
+-- where HP alone isn't a clean signal: pair an HP threshold with a time
+-- safety-net so you never miss the burn window.
 
 DB.BOSSES = {
     -- ==================== KARAZHAN ====================
@@ -148,22 +148,12 @@ DB.BOSSES = {
     ["kara_chess"]      = { raidKey = "kara", npcIds = { 21752, 21684 }, name = "Chess Event",                                     default = { type = "pull" } },
     ["kara_prince"]     = { raidKey = "kara", npcIds = { 15690 },        name = "Prince Malchezaar",
         default = { type = "hp", hp = 30 },
-        yells = {
-            [2] = { "All will be laid to waste",                         -- infernal phase begins
-                    "Time is the fire in which you'll burn",             -- canonical P2 yell
-                    "Zeit ist das Feuer, in dem Ihr brennen werdet" },   -- deDE
-            [3] = { "Not enough!",                                       -- phase 3
-                    "How can you hope to stand against such overwhelming power", -- canonical P3 yell
-                    "einer so überwältigenden Macht gewachsen" },        -- deDE (substring)
-        },
     },
+    -- Nightbane phase cycling (ground / air) is not HP-driven, so HP 50
+    -- is the closest safe approximation: lands on the second ground
+    -- phase for most pulls, which is the standard BL window.
     ["kara_nightbane"]  = { raidKey = "kara", npcIds = { 17225 },        name = "Nightbane", aliases = { "Nightbane (Raid)" },
-        default = { type = "phase", phase = 2 },
-        yells = {
-            [2] = { "Fleshlings, your time has come",                             -- ground phase
-                    "Genug! Ich werde landen",                                    -- deDE landing yell
-                    "Insekten! Lasst mich Euch meine Kraft" },                    -- deDE alternate landing yell
-        },
+        default = { type = "hp", hp = 50 },
     },
 
     -- ==================== GRUUL'S LAIR ====================
@@ -171,64 +161,64 @@ DB.BOSSES = {
     ["gruul_gruul"]     = { raidKey = "gruul", npcIds = { 19044 },       name = "Gruul the Dragonkiller",                         default = { type = "hp", hp = 30 } },
 
     -- ==================== MAGTHERIDON'S LAIR ====================
+    -- Magtheridon's break-free is on a fixed ~2 minute timer, not HP, but
+    -- the raid engages him at 100% after the channelers die. HP 30 hits
+    -- the canonical burn window after the first Blast Nova cycle.
     ["mag_magtheridon"] = { raidKey = "mag",  npcIds = { 17257 },        name = "Magtheridon",
-        default = { type = "phase", phase = 3 },
-        yells = {
-            [3] = { "I am... unleashed!", "Ich... bin... frei!" }, -- phase 3 / breakout burn
-        },
+        default = { type = "hp", hp = 30 },
     },
 
     -- ==================== SERPENTSHRINE CAVERN ====================
     ["ssc_hydross"]     = { raidKey = "ssc", npcIds = { 21216 },        name = "Hydross the Unstable",                             default = { type = "pull" } },
     ["ssc_lurker"]      = { raidKey = "ssc", npcIds = { 21217 },        name = "The Lurker Below",                                 default = { type = "pull" } },
-    ["ssc_leotheras"]   = { raidKey = "ssc", npcIds = { 21215 },        name = "Leotheras the Blind",                              default = { type = "phase", phase = 2 }, yells = { [2] = { "Now you will feel true pain", "Hinfort, unbedeutender Elf" } } }, -- deDE: demon form yell
+    -- Leotheras's demon-form cycle is time-based, not HP. Inner Demons
+    -- trigger at 15%; HP 15 catches the execute burn after the last
+    -- demon-phase split.
+    ["ssc_leotheras"]   = { raidKey = "ssc", npcIds = { 21215 },        name = "Leotheras the Blind",                              default = { type = "hp", hp = 15 } },
     ["ssc_flk"]         = { raidKey = "ssc", npcIds = { 21214 },        name = "Fathom-Lord Karathress",                           default = { type = "hp", hp = 35 } },
     -- Morogrim spawns murloc adds at 50% and 25%. Popping BL at 25% after
     -- the second wave is handled lets the raid burn him down before another
     -- add set spawns.
     ["ssc_morogrim"]    = { raidKey = "ssc", npcIds = { 21213 },        name = "Morogrim Tidewalker",                              default = { type = "hp", hp = 25 } },
+    -- Lady Vashj's P3 starts at 70% but BL is almost always saved for the
+    -- final burn after the striders / naga pressure eases.
     ["ssc_vashj"]       = { raidKey = "ssc", npcIds = { 21212 },        name = "Lady Vashj",
-        default = { type = "phase", phase = 3 },
-        yells = {
-            [3] = { "I have waited long enough", "Geht besser in Deckung" }, -- phase 3 (deDE: DBM alternate yell)
-        },
+        default = { type = "hp", hp = 30 },
     },
 
     -- ==================== TEMPEST KEEP (THE EYE) ====================
+    -- Al'ar P2 starts when the raid finishes P1 (separate HP pool), so
+    -- tracking by P2 HP is the right call. HP 20 is the final burn.
     ["tk_alar"]         = { raidKey = "tk", npcIds = { 19514 },          name = "Al'ar",
-        default = { type = "phase", phase = 2 },
-        yells = { [2] = { "Burn" } },                        -- phase 2 trigger       TODO: deDE
+        default = { type = "hp", hp = 20 },
     },
     ["tk_vr"]           = { raidKey = "tk", npcIds = { 19516 },          name = "Void Reaver",                                       default = { type = "pull" } },
     ["tk_solarian"]     = { raidKey = "tk", npcIds = { 18805 },          name = "High Astromancer Solarian",                         default = { type = "hp", hp = 20 } },
     -- Tagged with instanceId so the name-index disambiguator can tell
     -- raid Kael apart from Magister's Terrace Kael (same name, different
     -- instance). The MgT entry below carries the matching tag.
+    -- Kael'thas P5 is his own HP-based final phase (he resurrects at
+    -- 100% after advisors). HP 50 is the standard BL window on P5 burn.
     ["tk_kaelthas"]     = { raidKey = "tk", npcIds = { 19622 },          name = "Kael'thas Sunstrider",
         instanceId = 550,
-        default = { type = "phase", phase = 5 },
-        yells = {
-            [5] = { "Forgive me my friends", "Ich bin nicht so weit gekommen" }, -- phase 5 (deDE: DBM alternate yell)
-        },
+        default = { type = "hp", hp = 50 },
     },
 
     -- ==================== ZUL'AMAN ====================
     ["za_akilzon"]      = { raidKey = "za", npcIds = { 23574 },          name = "Akil'zon",                                          default = { type = "pull" } },
     ["za_nalorakk"]     = { raidKey = "za", npcIds = { 23576 },          name = "Nalorakk",                                          default = { type = "pull" } },
     ["za_jan"]          = { raidKey = "za", npcIds = { 23578 },          name = "Jan'alai",                                          default = { type = "hp", hp = 35 } },
-    ["za_halazzi"]      = { raidKey = "za", npcIds = { 23577 },          name = "Halazzi",                                           default = { type = "phase", phase = 2 }, yells = { [2] = { "Totem will crush you!", "Ich kämpfe mit wildem Geist" } } }, -- deDE: DBM alternate yell
+    -- Halazzi merges into the single-boss phase at 50%, then the burn
+    -- window is HP 20.
+    ["za_halazzi"]      = { raidKey = "za", npcIds = { 23577 },          name = "Halazzi",                                           default = { type = "hp", hp = 20 } },
     -- Hex Lord's abilities (Spirit Bolts, Drain Power) only get nastier as
     -- the fight drags on. Pulling with BL skips an entire Spirit Bolts cycle
     -- and is the standard community call for the timed-chest run.
     ["za_hexlord"]      = { raidKey = "za", npcIds = { 24239 },          name = "Hex Lord Malacrass",                                default = { type = "pull" } },
+    -- Zul'jin transitions every 20% (bear 80, eagle 60, lynx 40,
+    -- dragonhawk 20). Dragonhawk is the burn phase — HP 20.
     ["za_zuljin"]       = { raidKey = "za", npcIds = { 23863 },          name = "Zul'jin",
-        default = { type = "phase", phase = 5 },
-        yells = {
-            [2] = { "Bear spirit, hear me!", "Sagt 'Hallo' zu Bruder Bär" },                         -- deDE: DBM alternate yell
-            [3] = { "Eagle spirit, lend me your wings!", "Niemand versteckt sich vor dem Adler" },   -- deDE: DBM alternate yell
-            [4] = { "Lynx spirit, come to me!", "Lernt meine Brüder kennen: Reißzahn und Klaue" },  -- deDE: DBM alternate yell
-            [5] = { "Dragonhawk, guide my hand!", "Der Drachenfalke steht schon vor Euch" },         -- deDE: DBM alternate yell
-        },
+        default = { type = "hp", hp = 20 },
     },
 
     -- ==================== HYJAL SUMMIT ====================
@@ -247,33 +237,33 @@ DB.BOSSES = {
     -- fires during the actual DPS phase rather than the channeling setup.
     ["bt_akama"]        = { raidKey = "bt", npcIds = { 22841 },          name = "Shade of Akama",                                    default = { type = "hp", hp = 35 } },
     ["bt_bloodboil"]    = { raidKey = "bt", npcIds = { 22948 },          name = "Gurtogg Bloodboil",                                 default = { type = "hp", hp = 25 } },
-    ["bt_ros"]          = { raidKey = "bt", npcIds = { 23420 },          name = "Reliquary of Souls", aliases = { "Essence of Souls" }, default = { type = "phase", phase = 3 }, yells = { [3] = { "I will not be denied" } } }, -- TODO: deDE
+    -- ROS phase 3 (Essence of Anger) has its own HP pool; HP 50 on
+    -- that pool hits the Spite-burst burn window.
+    ["bt_ros"]          = { raidKey = "bt", npcIds = { 23420 },          name = "Reliquary of Souls", aliases = { "Essence of Souls" }, default = { type = "hp", hp = 50 } },
     ["bt_teron"]        = { raidKey = "bt", npcIds = { 22871 },          name = "Teron Gorefiend",                                   default = { type = "pull" } },
     ["bt_mother"]       = { raidKey = "bt", npcIds = { 22947 },          name = "Mother Shahraz",                                    default = { type = "pull" } },
     ["bt_council"]      = { raidKey = "bt", npcIds = { 22949, 22950, 22951, 22952 }, name = "Illidari Council",                      default = { type = "pull" } },
+    -- Illidan's final phase (P5) is the "You are not prepared" burn
+    -- at 30%. Earlier phases are HP-gated (P2 at 65%, P3 demon at 30%,
+    -- P4 at 30% again after demon ends), so HP 30 fires on the
+    -- P5 transition out of demon form.
     ["bt_illidan"]      = { raidKey = "bt", npcIds = { 22917 },          name = "Illidan Stormrage",
-        default = { type = "phase", phase = 5 },
-        yells = {
-            [2] = { "Behold the flames of Azzinoth" },                                         -- phase 2        TODO: deDE
-            [3] = { "I will not be touched by rabble", "Erzittert vor der Macht des Dämonen" }, -- phase 3 demon (deDE: DBM alternate yell)
-            [4] = { "You have come a long way", "War's das schon, Sterbliche" },                -- phase 4       (deDE: DBM alternate yell)
-            [5] = { "You are not prepared" },                                                    -- final phase    TODO: deDE
-        },
+        default = { type = "hp", hp = 30 },
     },
 
     -- ==================== SUNWELL PLATEAU ====================
     ["swp_kalecgos"]    = { raidKey = "swp", npcIds = { 24850 },         name = "Kalecgos",                                         default = { type = "pull" } },
     ["swp_brutallus"]   = { raidKey = "swp", npcIds = { 24882 },         name = "Brutallus",                                        default = { type = "pull" } },
-    ["swp_felmyst"]     = { raidKey = "swp", npcIds = { 25038 },         name = "Felmyst",                                          default = { type = "phase", phase = 2 }, yells = { [2] = { "Choke on your final breath", "Ich bin stärker als je zuvor" } } }, -- deDE: DBM alternate yell
+    -- Felmyst P2 (ground phase) starts at 60% and has separate HP pool.
+    -- HP 30 catches the execute window after Encapsulate.
+    ["swp_felmyst"]     = { raidKey = "swp", npcIds = { 25038 },         name = "Felmyst",                                          default = { type = "hp", hp = 30 } },
     ["swp_eredar"]      = { raidKey = "swp", npcIds = { 25165, 25166 },  name = "Eredar Twins", aliases = { "Grand Warlock Alythess", "Lady Sacrolash" }, default = { type = "hp", hp = 25 } },
-    ["swp_muru"]        = { raidKey = "swp", npcIds = { 25741 },         name = "M'uru",                                            default = { type = "phase", phase = 2 } },
+    -- M'uru P2 is Entropius with his own 100% HP pool. BL on Entropius
+    -- spawn is the raid standard.
+    ["swp_muru"]        = { raidKey = "swp", npcIds = { 25741 },         name = "M'uru",                                            default = { type = "pull" } },
+    -- Kil'jaeden P4 is the final 25% burn. Earlier phases are time-gated.
     ["swp_kiljaeden"]   = { raidKey = "swp", npcIds = { 25315 },         name = "Kil'jaeden",
-        default = { type = "phase", phase = 4 },
-        yells = {
-            [2] = { "I am the hand of Sargeras" },              -- TODO: deDE
-            [3] = { "Do not hold back" },                    -- TODO: deDE
-            [4] = { "Unleash the fury" },                    -- final burn phase  TODO: deDE
-        },
+        default = { type = "hp", hp = 25 },
     },
 
     -- ============================================================================
@@ -366,15 +356,11 @@ DB.BOSSES = {
     ["arc_zereketh"]    = { raidKey = "arc",  isDungeon = true, npcIds = { 20870 },  name = "Zereketh the Unbound",    default = { type = "pull" } },
     ["arc_dalliah"]     = { raidKey = "arc",  isDungeon = true, npcIds = { 20885 },  name = "Dalliah the Doomsayer",   default = { type = "pull" } },
     ["arc_soccothrates"]= { raidKey = "arc",  isDungeon = true, npcIds = { 20886 },  name = "Wrath-Scryer Soccothrates", default = { type = "pull" } },
-    -- Skyriss splits into illusions at 66% (phase 2) and again at 33%
-    -- (phase 3). The 66% split is the standard BL call — burn the real
-    -- Skyriss + illusions before the second split makes it chaotic.
+    -- Skyriss splits at 66% and 33%. Popping BL just before the 66%
+    -- split burns Skyriss + illusions before the second split makes
+    -- it chaotic.
     ["arc_skyriss"]     = { raidKey = "arc",  isDungeon = true, npcIds = { 20912 },  name = "Harbinger Skyriss",
-        default = { type = "phase", phase = 2 },
-        yells = {
-            [2] = { "I'll rip the flesh from your bones" },                  -- TODO: deDE
-            [3] = { "Not again! I will not be touched by you rabble" },   -- TODO: deDE
-        },
+        default = { type = "hp", hp = 70 },
     },
 
     -- ==================== MAGISTERS' TERRACE ====================
@@ -527,7 +513,6 @@ function DB:GetTriggerConfig(id)
         else
             if override.type    then cfg.type    = override.type    end
             if override.hp      then cfg.hp      = override.hp      end
-            if override.phase   then cfg.phase   = override.phase   end
             if override.seconds then cfg.seconds = override.seconds end
         end
     end
@@ -598,12 +583,15 @@ end
 -- <spec> is one of:
 --     pull         -> trigger on pull
 --     hp:<N>       -> trigger at HP% <= N
---     phase:<N>    -> trigger on phase >= N
+--     time:<N>     -> trigger N seconds after pull
+--     skip         -> never fire
+--     any(sub;..)  -> compound trigger; fires on the first sub to match
 --     off          -> disabled for this boss
 --
 -- Backward compatibility: ImportHash also accepts a bare `HH1|...` or
 -- `HH2|...` plaintext string (no HH!/base64 wrapper), so strings produced
--- by earlier builds keep working.
+-- by earlier builds keep working. Phase specs (`phase:N`) from pre-phase-
+-- removal exports decode to an HP 30 fallback — see DecodeSubSpec.
 
 local EXPORT_VERSION = "HH2"
 local HASH_PREFIX    = "HH!"
@@ -675,7 +663,6 @@ local function EncodeSpec(cfg, enabled)
     if cfg.type == "pull"  then return "pull" end
     if cfg.type == "skip"  then return "skip" end
     if cfg.type == "hp"    and cfg.hp      then return "hp:"    .. tostring(cfg.hp)      end
-    if cfg.type == "phase" and cfg.phase   then return "phase:" .. tostring(cfg.phase)   end
     if cfg.type == "time"  and cfg.seconds then return "time:"  .. tostring(cfg.seconds) end
     if cfg.type == "any"   and cfg.conditions then
         -- Compound encoding: any(sub;sub;sub) where each sub is itself a
@@ -704,7 +691,8 @@ local function DecodeSubSpec(sub)
     if kind == "hp" and val then
         return { type = "hp", hp = math.max(1, math.min(99, val)) }
     elseif kind == "phase" and val then
-        return { type = "phase", phase = math.max(1, math.min(10, val)) }
+        -- Legacy phase sub-spec from pre-removal exports: degrade to HP 30.
+        return { type = "hp", hp = 30 }
     elseif kind == "time" and val then
         return { type = "time", seconds = math.max(1, math.min(600, val)) }
     end
@@ -745,8 +733,9 @@ local function ParseEntries(rest)
                         o.type = "hp"
                         o.hp   = math.max(1, math.min(99, tonumber(val) or 35))
                     elseif kind == "phase" then
-                        o.type  = "phase"
-                        o.phase = math.max(1, math.min(10, tonumber(val) or 2))
+                        -- Legacy phase spec: degrade to HP 30 fallback.
+                        o.type = "hp"
+                        o.hp   = 30
                     elseif kind == "time" then
                         o.type    = "time"
                         o.seconds = math.max(1, math.min(600, tonumber(val) or 30))
@@ -787,9 +776,9 @@ function DB:ExportHash()
         local cfg = {}
         for k, v in pairs(boss.default) do cfg[k] = v end
         if override then
-            if override.type  then cfg.type  = override.type  end
-            if override.hp    then cfg.hp    = override.hp    end
-            if override.phase then cfg.phase = override.phase end
+            if override.type    then cfg.type    = override.type    end
+            if override.hp      then cfg.hp      = override.hp      end
+            if override.seconds then cfg.seconds = override.seconds end
         end
         local enabled = not (override and override.enabled == false)
 

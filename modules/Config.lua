@@ -779,7 +779,7 @@ function Config:BuildBossesTab(panel)
     -- StaticPopup confirmation for Reset. Registered once; subsequent
     -- invocations of BuildBossesTab overwrite the same slot harmlessly.
     StaticPopupDialogs["HEROHELPER_RESET_BOSSES"] = {
-        text         = "Reset all per-boss HeroHelper settings to defaults?\n\nThis clears every override (HP thresholds, phase picks, disabled flags) for every boss in every raid. The action cannot be undone.",
+        text         = "Reset all per-boss HeroHelper settings to defaults?\n\nThis clears every override (HP thresholds, timers, disabled flags) for every boss in every raid. The action cannot be undone.",
         button1      = YES or "Yes",
         button2      = NO  or "No",
         OnAccept     = function()
@@ -864,38 +864,23 @@ function Config:RefreshBossList()
         -- Current trigger config (merged default + override)
         local cfg = HH.Database:GetTriggerConfig(bossID) or boss.default
 
-        -- "Phase" is only a valid trigger type for bosses that have a
-        -- yell-pattern table in the database — the Triggers module advances
-        -- phase counters by matching boss-yell text against
-        -- Database.yells[phase]. Bosses without a yells table can't be
-        -- phase-detected, so we omit the "Phase" option from their
-        -- dropdowns entirely instead of letting the player pick a trigger
-        -- that would silently never fire.
-        local canPhase = boss.yells ~= nil and next(boss.yells) ~= nil
-
         local typeItems = {
             { label = "Pull",  value = "pull" },
             { label = "HP %",  value = "hp"   },
             { label = "Time",  value = "time" },
+            { label = "Skip",  value = "skip" },
+            { label = "Multi", value = "any"  },
+            { label = "Off",   value = "off"  },
         }
-        if canPhase then
-            table.insert(typeItems, { label = "Phase", value = "phase" })
-        end
-        table.insert(typeItems, { label = "Skip",  value = "skip" })
-        table.insert(typeItems, { label = "Multi", value = "any" })
-        table.insert(typeItems, { label = "Off",   value = "off" })
 
-        -- Unit suffix label, swapped per trigger type so the player can
-        -- tell at a glance whether the value box means percent, seconds
-        -- or a phase number. Anchored to the row's right edge; the edit
-        -- box anchors to its left so the layout shifts as the unit width
-        -- changes between "%", "s" and the empty phase case.
+        -- Unit suffix label swapped between "%" (HP) and "s" (time) so the
+        -- player can tell what the value box means at a glance.
         local unitLabel = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         unitLabel:SetPoint("RIGHT", row, "RIGHT", -8, 0)
         unitLabel:SetTextColor(D.label[1], D.label[2], D.label[3])
         unitLabel:Hide()
 
-        -- HP / Phase / Time edit box (shared slot, switched based on type)
+        -- HP / Time edit box (shared slot, switched based on type)
         local edit = CreateFrame("EditBox", nil, row)
         edit:SetSize(50, 20)
         edit:SetPoint("RIGHT", unitLabel, "LEFT", -3, 0)
@@ -927,11 +912,6 @@ function Config:RefreshBossList()
                 unitLabel:SetText("%")
                 unitLabel:Show()
                 editCompoundBtn:Hide()
-            elseif effective.type == "phase" then
-                edit:Show()
-                edit:SetText(tostring(effective.phase or 2))
-                unitLabel:Hide()
-                editCompoundBtn:Hide()
             elseif effective.type == "time" then
                 edit:Show()
                 edit:SetText(tostring(effective.seconds or 30))
@@ -958,8 +938,6 @@ function Config:RefreshBossList()
             local effective = HH.Database:GetTriggerConfig(bossID) or boss.default or {}
             if effective.type == "hp" and v then
                 override.hp = math.max(1, math.min(99, v))
-            elseif effective.type == "phase" and v then
-                override.phase = math.max(1, math.min(10, v))
             elseif effective.type == "time" and v then
                 override.seconds = math.max(1, math.min(600, v))
             end
@@ -971,8 +949,6 @@ function Config:RefreshBossList()
         local initialLabel = "Pull"
         if cfg.type == "hp" then
             initialLabel = "HP %"
-        elseif cfg.type == "phase" and canPhase then
-            initialLabel = "Phase"
         elseif cfg.type == "time" then
             initialLabel = "Time"
         elseif cfg.type == "skip" then
@@ -982,10 +958,6 @@ function Config:RefreshBossList()
         elseif cfg.type == "off" then
             initialLabel = "Off"
         end
-        -- If a stale saved override says "phase" on a boss that has no
-        -- yells, the Phase option won't be in the dropdown for this boss.
-        -- Leave initialLabel at "Pull" so the dropdown shows a selectable
-        -- state rather than a ghost "Phase" entry the player can't re-pick.
 
         local typeDD = MakeDropdown(row, 80, typeItems, function(value)
             HH.chardb.bosses[bossID] = HH.chardb.bosses[bossID] or {}
@@ -1000,7 +972,6 @@ function Config:RefreshBossList()
                 override.conditions = override.conditions or {}
                 -- Clear single-type fields when switching INTO compound.
                 override.hp      = nil
-                override.phase   = nil
                 override.seconds = nil
                 -- Open the editor immediately so the user can populate
                 -- conditions. Cancel reverts the override if it was new.
@@ -1010,7 +981,6 @@ function Config:RefreshBossList()
                 override.type       = value
                 override.conditions = nil  -- leaving compound clears the list
                 if value == "hp"    and not override.hp      then override.hp      = boss.default.hp      or 35 end
-                if value == "phase" and not override.phase   then override.phase   = boss.default.phase   or 2  end
                 if value == "time"  and not override.seconds then override.seconds = boss.default.seconds or 30 end
             end
             UpdateEdit()
@@ -1189,10 +1159,10 @@ end
 -- ============================================================================
 --
 -- Lets the player build a compound (any-of) trigger for a single boss
--- via four checkboxes (Pull / HP / Phase / Time) with inline value
--- editors. Save writes a { type = "any", conditions = {...} } override
--- into HH.chardb.bosses[bossID]; Cancel reverts the dropdown change if
--- the boss didn't already have compound conditions.
+-- via three checkboxes (Pull / HP / Time) with inline value editors.
+-- Save writes a { type = "any", conditions = {...} } override into
+-- HH.chardb.bosses[bossID]; Cancel reverts the dropdown change if the
+-- boss didn't already have compound conditions.
 --
 -- The popup is a single shared frame; ShowCompoundPopup re-binds it to
 -- whichever boss the player is editing.
@@ -1284,8 +1254,7 @@ local function CreateCompoundPopup()
 
     f.cbPull,  _,         _          = MakeRow(f, "Pull (cast immediately on engage)", false, nil, -PADDING - 40)
     f.cbHP,    f.editHP,  f.suffixHP = MakeRow(f, "HP percent below",                  true,  "%", -PADDING - 64)
-    f.cbPhase, f.editPhase, _        = MakeRow(f, "Phase reached",                     true,  "",  -PADDING - 88)
-    f.cbTime,  f.editTime, f.suffixT = MakeRow(f, "Seconds after pull",                true,  "s", -PADDING - 112)
+    f.cbTime,  f.editTime, f.suffixT = MakeRow(f, "Seconds after pull",                true,  "s", -PADDING - 88)
 
     -- Action buttons
     local btnSave = MakeFlatButton(f, "Save", 90, 22)
@@ -1320,20 +1289,13 @@ function Config:ShowCompoundPopup(bossID)
         and (not override.conditions or #override.conditions == 0)
     )
 
-    -- Phase row only meaningful for bosses with yell patterns.
-    local canPhase = boss.yells ~= nil and next(boss.yells) ~= nil
-    f.cbPhase:SetShown(canPhase)
-    f.editPhase:SetShown(canPhase)
-
     -- Pre-fill from current effective config (default or existing override).
     local cfg = HH.Database:GetTriggerConfig(bossID) or boss.default
     local existing = (cfg and cfg.type == "any" and cfg.conditions) or {}
     f.cbPull:SetChecked(false)
     f.cbHP:SetChecked(false)
-    f.cbPhase:SetChecked(false)
     f.cbTime:SetChecked(false)
     f.editHP:SetText(tostring(boss.default.hp or 25))
-    f.editPhase:SetText(tostring(boss.default.phase or 2))
     f.editTime:SetText(tostring(boss.default.seconds or 60))
     for _, cond in ipairs(existing) do
         if cond.type == "pull" then
@@ -1341,9 +1303,6 @@ function Config:ShowCompoundPopup(bossID)
         elseif cond.type == "hp" then
             f.cbHP:SetChecked(true)
             f.editHP:SetText(tostring(cond.hp or 25))
-        elseif cond.type == "phase" and canPhase then
-            f.cbPhase:SetChecked(true)
-            f.editPhase:SetText(tostring(cond.phase or 2))
         elseif cond.type == "time" then
             f.cbTime:SetChecked(true)
             f.editTime:SetText(tostring(cond.seconds or 60))
@@ -1360,10 +1319,6 @@ function Config:ShowCompoundPopup(bossID)
         if f.cbHP:GetChecked() then
             local v = tonumber(f.editHP:GetText()) or 25
             conditions[#conditions + 1] = { type = "hp", hp = math.max(1, math.min(99, v)) }
-        end
-        if canPhase and f.cbPhase:GetChecked() then
-            local v = tonumber(f.editPhase:GetText()) or 2
-            conditions[#conditions + 1] = { type = "phase", phase = math.max(1, math.min(10, v)) }
         end
         if f.cbTime:GetChecked() then
             local v = tonumber(f.editTime:GetText()) or 60
@@ -1382,7 +1337,6 @@ function Config:ShowCompoundPopup(bossID)
         o.conditions = conditions
         -- Clear single-type fields so they don't bleed through.
         o.hp      = nil
-        o.phase   = nil
         o.seconds = nil
 
         f:Hide()

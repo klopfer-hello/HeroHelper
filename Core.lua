@@ -289,6 +289,28 @@ local function InitializeSavedVariables()
 
     HH.db      = HeroHelperDB
     HH.chardb  = HeroHelperCharDB
+
+    -- Migrate per-boss overrides from the removed "phase" trigger type
+    -- to an HP 30 fallback. Applies to both single-type overrides and
+    -- compound sub-conditions.
+    if HH.chardb.bosses then
+        for _, o in pairs(HH.chardb.bosses) do
+            if o.type == "phase" then
+                o.type  = "hp"
+                o.hp    = 30
+                o.phase = nil
+            end
+            if o.conditions then
+                for _, cond in ipairs(o.conditions) do
+                    if cond.type == "phase" then
+                        cond.type  = "hp"
+                        cond.hp    = 30
+                        cond.phase = nil
+                    end
+                end
+            end
+        end
+    end
 end
 
 -- ============================================================================
@@ -338,12 +360,8 @@ local events = {
     "PLAYER_TARGET_CHANGED",
     "UPDATE_MOUSEOVER_UNIT",
 
-    -- Phase detection via emotes
-    "CHAT_MSG_MONSTER_YELL",
-    "CHAT_MSG_RAID_BOSS_EMOTE",
-    "CHAT_MSG_RAID_BOSS_WHISPER",
-
-    -- Combat log for health tracking + spell-cast phase triggers
+    -- Combat log for health tracking (phase-yell handling was removed
+    -- when the phase trigger type was dropped; see modules/Triggers.lua).
     "COMBAT_LOG_EVENT_UNFILTERED",
 
     -- Keep UI fresh on spec/cd changes
@@ -403,14 +421,6 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 
     if event == "UPDATE_MOUSEOVER_UNIT" then
         HH.Events:Fire("MOUSEOVER_CHANGED")
-        return
-    end
-
-    if event == "CHAT_MSG_MONSTER_YELL"
-       or event == "CHAT_MSG_RAID_BOSS_EMOTE"
-       or event == "CHAT_MSG_RAID_BOSS_WHISPER" then
-        local text, source = ...
-        HH.Events:Fire("BOSS_YELL", text, source)
         return
     end
 

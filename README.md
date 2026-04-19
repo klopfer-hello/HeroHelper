@@ -45,9 +45,9 @@ Each boss has a default trigger that should be sensible for most raids. You can 
 
 - **Pull** — fires the reminder the moment you engage the boss.
 - **HP %** — fires when the boss drops below a chosen HP percentage (good for execute phases).
-- **Phase** — fires when the boss enters a specific phase (only for bosses with detectable phase yells).
 - **Time** — fires a fixed number of seconds after the pull.
-- **Multi** — fires on the *first* of multiple conditions you pick (e.g. *phase 3 or HP 25% or 90 seconds in*).
+- **Multi** — fires on the *first* of multiple conditions you pick (e.g. *HP 25% or 90 seconds in*).
+- **Skip** — don't fire for this boss.
 - **Off** — disable the reminder for this boss entirely.
 
 Click **Export** to copy your settings as a share string and send them to the rest of your raid. They click **Import** and you're synced.

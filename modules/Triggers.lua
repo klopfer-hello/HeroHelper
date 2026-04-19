@@ -13,9 +13,9 @@
     * The trigger condition in the boss config evaluates to true:
         - type == "pull"  -> fire immediately once a pull is detected
         - type == "hp"    -> fire when the boss HP% <= threshold
-        - type == "phase" -> fire when a boss yell / emote matches the phase
-                             entry text (see Database.yells), or when the
-                             configured CLEU spell cast is observed
+        - type == "time"  -> fire N seconds after the pull
+        - type == "any"   -> fire on the first of multiple sub-conditions
+        - type == "skip"  -> never fire
     * The reminder has not already been triggered for this pull
 
     After firing, the trigger latches until combat ends or the boss resets.
@@ -25,9 +25,6 @@ local ADDON_NAME, HH = ...
 
 HH.Triggers = {}
 local T = HH.Triggers
-
--- Accumulated phase number per pull (phase detection via yells is monotonic)
-local currentPhase = 1
 
 -- HP polling interval (seconds) — we don't want to run UnitHealth scans every
 -- frame. 0.25s gives us responsive triggering without measurable cost.
@@ -114,9 +111,8 @@ end
 -- Per-trigger-type evaluation
 -- ============================================================================
 
--- Arms a single trigger condition. May fire immediately (pull), schedule
--- a deferred fire (hp poll / time timer), or do nothing (phase — handled
--- separately by OnBossYell, which iterates conditions itself).
+-- Arms a single trigger condition. May fire immediately (pull) or
+-- schedule a deferred fire (hp poll / time timer).
 --
 -- TryFire latches HH.State.triggered the first time anything actually
 -- fires, so arming multiple conditions in parallel is safe — only the
@@ -148,8 +144,6 @@ local function ArmCondition(cond)
         end)
         table.insert(activeTimeTimers, timer)
     end
-    -- "phase" conditions are armed implicitly: OnBossYell scans the active
-    -- config's conditions list whenever a yell advances the phase counter.
 end
 
 -- Trigger evaluation that runs on EITHER BOSS_PULL or COMBAT_START.
@@ -180,7 +174,6 @@ end
 
 -- BOSS_PULL handler. Resets per-pull state and runs the trigger evaluator.
 local function OnBossPull(bossID)
-    currentPhase = 1
     HH.State.triggered = false
     CancelAllTimeTriggers() -- new pull invalidates any in-flight time timers
     EvaluatePullTrigger()
@@ -209,63 +202,6 @@ function T:StopHPPoll()
     if hpPollTicker then
         hpPollTicker:Cancel()
         hpPollTicker = nil
-    end
-end
-
--- "phase": advance currentPhase based on boss yell text, then fire when the
--- running phase counter reaches the configured target. Yell matching is a
--- simple case-insensitive substring search against the patterns declared in
--- Database.yells per boss.
--- Checks whether `text` (lowercased) matches any pattern in `patterns`.
--- `patterns` is either a list of strings (new format) or a single string
--- (legacy format, still accepted for backward compatibility).
-local function MatchesYellPatterns(lower, patterns)
-    if type(patterns) == "string" then
-        return lower:find(patterns:lower(), 1, true) and patterns or nil
-    end
-    if type(patterns) == "table" then
-        for _, p in ipairs(patterns) do
-            if type(p) == "string" and lower:find(p:lower(), 1, true) then
-                return p
-            end
-        end
-    end
-    return nil
-end
-
-local function OnBossYell(text)
-    if not HH.State.currentBossID or not text then return end
-    local boss = HH.Database:Get(HH.State.currentBossID)
-    if not boss or not boss.yells then return end
-
-    local lower = text:lower()
-    -- Iterate yells in phase order so we advance linearly.
-    local phases = {}
-    for p in pairs(boss.yells) do table.insert(phases, p) end
-    table.sort(phases)
-
-    for _, phase in ipairs(phases) do
-        if phase > currentPhase then
-            local matched = MatchesYellPatterns(lower, boss.yells[phase])
-            if matched then
-                currentPhase = phase
-                HH:Debug("Phase advanced to " .. phase .. " via yell: " .. matched)
-
-                -- Iterate the active conditions and fire if any phase
-                -- condition's target has been reached. Compound triggers
-                -- can have a phase condition alongside hp / pull / time —
-                -- whichever fires first wins via the triggered latch.
-                local cfg = HH.Database:GetTriggerConfig(HH.State.currentBossID)
-                for cond in IterConditions(cfg) do
-                    if cond.type == "phase"
-                       and currentPhase >= (cond.phase or 2) then
-                        TryFire("phase " .. currentPhase)
-                        return
-                    end
-                end
-                return
-            end
-        end
     end
 end
 
@@ -443,7 +379,6 @@ end
 
 function T:Initialize()
     HH.Events:On("BOSS_PULL", OnBossPull)
-    HH.Events:On("BOSS_YELL", function(text, source) OnBossYell(text) end)
     -- COMBAT_START re-runs the pull evaluator. Covers the case where the
     -- player tab-targeted the boss before pulling — BOSS_PULL fired
     -- pre-combat (when IsReady fails on the inCombat gate) and never re-fired
@@ -453,7 +388,6 @@ function T:Initialize()
         OnMobTestCombatStart()
     end)
     HH.Events:On("COMBAT_END", function()
-        currentPhase = 1
         HH.State.triggered = false
         T:StopHPPoll()
         CancelAllTimeTriggers()
