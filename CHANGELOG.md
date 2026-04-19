@@ -1,5 +1,105 @@
 # HeroHelper - TBC Anniversary Edition - Changelog
 
+## v2.0.0
+
+Major refactor driven by a click-through bug that burned a Shaman on
+Magtheridon — the reminder fired Heroism whenever he left-clicked
+anywhere over his Grid2 frames. Fixing that reliably on TBC Classic
+2.5.5 turned out to require rethinking how the addon casts, how
+coordination works, and how trigger conditions are evaluated.
+
+### Breaking
+
+- **The reminder no longer casts on click.** It's now a purely visual
+  indicator. Casting happens via a keybind you set on the auto-created
+  `HeroHelperCast` macro. This permanently fixes the click-through bug
+  — there's no clickable surface left that could miscast onto an
+  occluded raid frame. Set a key once in Escape > Key Bindings >
+  Macros, press it when the reminder pops.
+- **Phase trigger type removed.** Yell-based phase detection was
+  unreliable, especially on Magtheridon where the "I am... unleashed!"
+  yell fires before Detection identifies the boss. All phase-based
+  boss defaults were converted to HP thresholds tuned to the canonical
+  BL timing for each fight:
+    - Magtheridon   -> HP 30   (post-breakout burn)
+    - Lady Vashj    -> HP 30   (P3 burn after striders)
+    - Kael'thas TK  -> HP 50   (P5 burn)
+    - Nightbane     -> HP 50   (second ground phase)
+    - Leotheras     -> HP 15   (final execute)
+    - Al'ar         -> HP 20   (P2 final)
+    - Halazzi       -> HP 20   (merged-phase burn)
+    - Zul'jin       -> HP 20   (dragonhawk final)
+    - Reliquary     -> HP 50   (Essence of Anger)
+    - Illidan       -> HP 30   (post-demon)
+    - Felmyst       -> HP 30   (ground phase execute)
+    - M'uru         -> pull    (BL on Entropius spawn)
+    - Kil'jaeden    -> HP 25   (P4 final)
+    - Skyriss       -> HP 70   (just before 66% split)
+  Existing per-boss overrides with `type = "phase"` in your
+  SavedVariables are auto-migrated to `{ type = "hp", hp = 30 }` on
+  load — nothing will crash, but you may want to re-tune any phase
+  override you had manually set.
+- **Multi-shaman coordination is now manual.** No more auto-locking on
+  raid entry. Without an active lock, every HeroHelper-using shaman
+  fires their own reminder. Use `/hh roster lock` to freeze the hero
+  order and announce it to group chat; `/hh roster unlock` to release.
+- **`coordinateShamans` and `announceCoordination` settings removed.**
+  The "Coordinate with other shamans" and "Announce Heroism order"
+  checkboxes are gone from the General tab. Role priority is still
+  there, consulted only at lock time.
+
+### New
+
+- **`HeroHelperCast` macro.** Auto-created per character with body
+  `/cast [@player] <spell>` (Heroism or Bloodlust depending on
+  faction). Refreshed on every login to stay in sync. Bind a key to
+  it in Escape > Key Bindings > Macros. A one-shot first-login chat
+  hint points to the setup step.
+- **`/hh roster lock | unlock`.** Manual roster control. `/hh roster`
+  (no subcommand) prints current state. Locking snapshots the live
+  roster, runs the election (lowest priority alive, alphabetical
+  tiebreak), and always announces the resolved order to raid/party
+  chat. Alive-aware fallback re-runs every fire so Primary dies >
+  Secondary takes over > Backup takes over.
+- **LSM-backed sound registry.** The Sound picker now pulls every
+  sound LSM knows about (BigWigs, ShamanPower, Details, your own
+  addons...). Same 9 shared defaults as ShamanPower, same
+  `MediaTable.sound[name] = path` direct-insert trick to bypass
+  LSM:Register's "Sound\\*" path rejection.
+- **Per-row sound preview.** Speaker icon next to each entry in the
+  Sound dropdown auditions that sound without committing.
+
+### Changed
+
+- **Custom dropdown widget** replaces LibUIDropDownMenu-4.0. LibDD's
+  shared global list frame leaked items between dropdowns (Bosses-tab
+  type items showing up in the General-tab role dropdown). The new
+  widget is self-contained per instance: its own popup, its own
+  click-catcher, scrollbar when the list exceeds 12 rows.
+- **User-facing strings** normalized to plain ASCII (em-dashes and
+  Unicode arrows didn't render in the WoW default font — they showed
+  as empty boxes).
+
+### Removed
+
+- `LibActionButton-1.0` (the ElvUI fork we tried to embed depends on
+  retail-only C_* APIs that don't exist in TBC 2.5.5).
+- `LibUIDropDownMenu-4.0` (replaced by the custom widget).
+- Yell-pattern database — the multi-language yell table (English +
+  German patterns from DBM localization / Wowhead TBC quote data)
+  was phase detection's only consumer.
+- `BOSS_YELL` event pipeline (nothing subscribes anymore).
+- `CHAT_MSG_MONSTER_YELL` / `CHAT_MSG_RAID_BOSS_EMOTE` /
+  `CHAT_MSG_RAID_BOSS_WHISPER` registrations on the shared event
+  frame.
+
+### Fixed
+
+- Click-through Heroism casts on raid frames under the hidden
+  reminder button (the bug that triggered this whole refactor).
+- Dropdown cross-contamination between unrelated dropdowns.
+- Tooltip unicode rendering on the reminder hover.
+
 ## v1.3.0
 
 ### New

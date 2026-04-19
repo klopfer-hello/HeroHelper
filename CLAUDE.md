@@ -117,7 +117,7 @@ Follows **Semantic Versioning** (`MAJOR.MINOR.PATCH`):
 | New backwards-compatible features | MINOR | 1.0.x → 1.1.0 |
 | Bug fixes only | PATCH | 1.1.x → 1.1.1 |
 
-Current version: `1.3.0` (locale-independent NPC ID detection, multi-string yell patterns, German deDE support, DBM callback fix, kill-order boss lists, skip trigger type, dungeon false-trigger fix, in-combat rescan ticker, multi-shaman coordination, dungeon support, compound triggers, time triggers). Semver applies going forward.
+Current version: `2.0.0` (major refactor: reminder is now visual-only, casting via a user-bound `HeroHelperCast` macro; phase trigger type removed with phase bosses converted to HP defaults; multi-shaman coordination is now manual via `/hh roster lock`; LSM-backed sound picker; custom self-contained dropdown widget replacing LibUIDropDownMenu). Semver applies going forward.
 
 ### Release Process
 

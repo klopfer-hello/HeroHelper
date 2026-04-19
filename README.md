@@ -101,7 +101,7 @@ HeroHelper refreshes the macro body on every login to keep it in sync with your 
 ### Compatibility
 
 - **Game version**: TBC Classic Anniversary (2.5.5)
-- **Addon version**: 1.3.0
+- **Addon version**: 2.0.0
 - Works on its own. Plays nicely with **BigWigs** and **DBM** if you have them.
 
 ---
