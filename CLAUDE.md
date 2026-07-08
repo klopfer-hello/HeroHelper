@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-HeroHelper is a World of Warcraft addon for **TBC Classic Anniversary** (interface version 20505, game version 2.5.5). It reminds Shamans to cast Heroism / Bloodlust at the right moment on every raid boss by showing a moveable, non-protected visual reminder frame only when the configured trigger condition for the current boss evaluates to true. The addon never casts the spell itself — the user casts Heroism / Bloodlust via whatever action bar / keybind / macro they already have set up. HeroHelper is a timing indicator, nothing more.
+HeroHelper is a World of Warcraft addon for **TBC Classic Anniversary** (interface version 20506, game version 2.5.6). It reminds Shamans to cast Heroism / Bloodlust at the right moment on every raid boss by showing a moveable, non-protected visual reminder frame only when the configured trigger condition for the current boss evaluates to true. The addon never casts the spell itself — the user casts Heroism / Bloodlust via whatever action bar / keybind / macro they already have set up. HeroHelper is a timing indicator, nothing more.
 
 The addon uses a global namespace `HH` (also `HeroHelper`) populated via the addon vararg `local ADDON_NAME, HH = ...`.
 
@@ -92,7 +92,7 @@ HH.State = {
 
 Whichever source fires first locks in `currentBossID` until `COMBAT_END` clears it. Re-identification mid-fight is a no-op (Detection guards with `if currentBossID then return end`).
 
-## TBC Classic 2.5.5 API Notes
+## TBC Classic 2.5.6 API Notes
 
 - `ENCOUNTER_START` / `ENCOUNTER_END` do not exist. We use `PLAYER_REGEN_DISABLED` + unit scanning + boss mod callbacks instead.
 - `boss1`..`boss5` unit tokens exist in TBC Anniversary but are not always populated — boss mods fill them in reliably, so we scan them anyway.
@@ -116,7 +116,7 @@ Follows **Semantic Versioning** (`MAJOR.MINOR.PATCH`):
 | New backwards-compatible features | MINOR | 1.0.x → 1.1.0 |
 | Bug fixes only | PATCH | 1.1.x → 1.1.1 |
 
-Current version: `2.0.1` (v2.0.0 major refactor + doc and code follow-up to drop the `HeroHelperCast` auto-macro that was erroneously shipped — the reminder is now purely informational with no macro creation or keybind setup required. Everything else from 2.0.0 stands: phase trigger removed with phase bosses converted to HP defaults; multi-shaman coordination is manual via `/hh roster lock`; LSM-backed sound picker; custom self-contained dropdown widget). Semver applies going forward.
+Current version: `2.0.2` (2.5.6 compatibility bump — `.toc` interface set to `20506`, no functional change). `2.0.1` (v2.0.0 major refactor + doc and code follow-up to drop the `HeroHelperCast` auto-macro that was erroneously shipped — the reminder is now purely informational with no macro creation or keybind setup required. Everything else from 2.0.0 stands: phase trigger removed with phase bosses converted to HP defaults; multi-shaman coordination is manual via `/hh roster lock`; LSM-backed sound picker; custom self-contained dropdown widget). Semver applies going forward.
 
 ### Release Process
 

@@ -94,8 +94,8 @@ HeroHelper never casts Heroism / Bloodlust for you — it's purely a timing remi
 
 ### Compatibility
 
-- **Game version**: TBC Classic Anniversary (2.5.5)
-- **Addon version**: 2.0.1
+- **Game version**: TBC Classic Anniversary (2.5.6)
+- **Addon version**: 2.0.2
 - Works on its own. Plays nicely with **BigWigs** and **DBM** if you have them.
 
 ---

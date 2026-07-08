@@ -1,8 +1,8 @@
-## Interface: 20505
+## Interface: 20506
 ## Title: |cFFFF7D1AHeroHelper|r - TBC Anniversary Edition
 ## Notes: Reminds you to cast Heroism / Bloodlust at the right moment on every TBC raid boss.
 ## Author: Klopfer-Hello
-## Version: 2.0.1
+## Version: 2.0.2
 ## SavedVariables: HeroHelperDB
 ## SavedVariablesPerCharacter: HeroHelperCharDB
 ## IconTexture: Interface\Icons\Spell_Nature_Bloodlust
